@@ -109,9 +109,12 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Round 1 done 2026-11-16 (all 8 items; see `TODO.md` "Completed Tasks" and
-"For Dan to check"). Next: Round 2 (virtual band v1) once Dan has checked
-Round 1. Layout: `src/model` (pure model + edits + undo + .mgproj),
+Round 1 is done and checked by Dan: import (MusicXML, Guitar Pro, MIDI), score
+and tab view, playback with cursor, instrument per track, mixer, speed,
+transpose, undo/redo, autosave. Current round: Round 2, the virtual band
+(chord recognition, part splitting, sections, 5 styles, band panel, better
+default SoundFont).
+Layout: `src/model` (pure model + edits + undo + .mgproj),
 `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
 `src/main` (Electron), `src/preload`, `src/renderer` (React UI, player,
 store, test API), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).
