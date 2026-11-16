@@ -85,7 +85,7 @@ export function fitVoice(beats: Beat[], barLen: number, keep = -1): Beat[] {
 }
 
 /** Clone the song and run `fn` on the cursor's voice (filled with rests first if empty). */
-function editVoice(song: Song, c: Cursor, fn: (beats: Beat[], track: Track, bar: BarHeader) => number | void): Song {
+export function editVoice(song: Song, c: Cursor, fn: (beats: Beat[], track: Track, bar: BarHeader) => number | void): Song {
   const next = cloneSong(song);
   const t = trackAt(next, c);
   const bar = next.bars[c.bar];
@@ -316,7 +316,7 @@ function nearestWithPc(pc: number, ref: number): number {
 }
 
 /** Place pitches on strings for a fretted track, near `aroundFret`. Notes that cannot be placed lose string/fret. */
-function placeOnStrings(notes: Note[], t: Track, aroundFret: number) {
+export function placeOnStrings(notes: Note[], t: Track, aroundFret: number) {
   if (!isFretted(t)) return;
   const pos = assignChord(notes.map((n) => n.pitch), t.tuning!, { capo: t.capo ?? 0, aroundFret });
   notes.forEach((n, i) => {

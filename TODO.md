@@ -128,59 +128,65 @@ Dan's check list for Round 3 (For Dan to check):
   triplets); a Rocksmith import's tempo changes every beat (only big changes are drawn);
   the exported song gets a ~2 s count-in bar and a 1-bar ending.
 
-## Current Objective
-### Round 4, "composition" (started 2026-11-16)
-Goal: write music from scratch, not just import it. Every new view edits
-the same model as the score and tabs; an edit in one shows up in all of
-them. Everything is undoable and survives save/reopen.
+### Round 4, "composition" (2026-11-16): DONE
+Checks ran in the packaged 0.4.0 app (`npm run e2e:r4`), hidden (off-screen, never shown or
+focusable) and `--mute`; speaker level measured 0 on every step that made sound (piano-roll
+playback, chord preview, chord-chart playback, MIDI recording: pre-gain 0.07-0.42, speakers 0).
+**No sound checks this round.** Unit tests 142/142 (`npm test`, 35 new). Rounds 1-3 app checks
+re-run on the 0.4.0 exe: all pass (Round 1: 7 items, Round 2: 9, Round 3: 9 incl. the full .psarc build). Screenshots `test-results/r4-*.png`; report
+`test-results/report-round4.json`. Open everything with **🎹 Compose** (a dock under the score;
+it works on the track selected in the track list).
+1. Piano roll: **done.** Draw (drag), move, resize (right edge), delete (right-click / Delete),
+   Shift+click multi-select, snap 1/4-1/32 + triplets, velocity lane, zoom, playhead follows
+   playback; fretted tracks get string/fret (capo kept) and refuse unplayable pitches. Check: 10
+   notes drawn with the mouse (incl. a chord, a tied note, 8th triplets) = same notes, strings and
+   frets in score and tab (`r4-1-piano-roll-score-tab.png`); unit test vs alphaTab's score.
+2. Chord explorer: **done.** Root / quality / extension / alterations / slash bass, or type a
+   name, or Explore… from a chord symbol. Open, barre and other shapes, power chords, string-set
+   triads, bass shapes, piano close/inversions/open/drop 2; click = hear, Insert = notes at the
+   cursor (+ chord symbol). Check: C, Am7, D/F#, E7#9 in standard (33-46 shapes) and Drop D
+   (30-44); unit test: every voicing's notes are chord tones, full shapes have every required
+   note and the bass lowest; screenshots `r4-2-*.png`.
+3. Progression helper: **done.** Key at the selected bar, diatonic chords, next-chord
+   suggestions, secondary dominants, borrowed chords, substitutions (relative, tritone, dim7);
+   15-progression library inserted over the selected bars. Check: unit tests in C major and
+   A minor; 12-bar blues in E inserted as E7×4 A7 A7 E7 E7 B7 A7 E7 B7 (`r4-3-*.png`).
+4. Drum step sequencer: **done.** 16/32 steps + triplet grid, 13 lanes + any GM kit piece,
+   accent (Shift) / ghost (right-click), copy/paste bar, fill section, built-in + saved patterns
+   (settings.json). Check: a beat built by clicking = the drum notation (unit test vs alphaTab);
+   generated drums show "edited" (`r4-4-drum-grid.png`).
+5. Chord charts + song-wide changes: **done.** New ▸ Chord chart… (bars, %, holds, repeats,
+   [sections], {key}, {3/4}, {tempo}, {accel/rit}) generates the band; Song ▸ Key, time & tempo
+   changes… at any bar, incl. gradual changes. Check: chart with a G→A key change and 3/4 bars
+   generated and played (muted, reached bar 5 through the repeat); tempo-map unit tests; unit
+   test that Rocksmith export has 3 beats in 3/4 bars and slowing beats in a ritardando.
+6. Harmony lines: **done.** Track row ▸ Harmony…: 3rd / 6th / octave, above or below, as a new
+   track, in key, chord tones on strong beats. Check: Ode to Joy unit test (all notes in key;
+   >70% exact diatonic 3rd/6th, the rest chord tones); `r4-6-harmony.png`.
+7. MIDI keyboard: **done.** Web MIDI device picker (remembered), plays through the selected
+   track's sound, step entry, recording with count-in, metronome, quantise (none/1/8/1/16/
+   triplets), add or replace. Check: unit test with simulated messages (notes at the expected
+   ticks); in the app a simulated keyboard recorded 4 quarters exactly 960 ticks apart.
+8. Save/load, undo, regression: **done.** Format v4. Check: every feature saved and reopened
+   deep-equal (unit + app), each action = one undo step (app: 6 actions undone one by one).
 
-1. **Piano roll.** Per-track view: draw, move, resize and delete notes;
-   snap grid (1/4 to 1/32, triplets); velocity lane; zoom; plays with the
-   cursor. Guitar/bass notes drawn here get playable string/fret positions.
-   Check: notes drawn in the piano roll appear identically in score and tab
-   (unit test + screenshot of both).
-2. **Chord explorer.** Pick a root, quality and extensions (or click a
-   chord symbol in the score). Show every practical guitar voicing (open,
-   barre/CAGED shapes up the neck, power chords, triads on string sets) as
-   chord diagrams with fingering, bass shapes, and piano inversions/voicings
-   (close, open, drop 2). Click to hear one; Insert puts it at the selected
-   beat of the selected track and can set the chord symbol. Respects the
-   track's tuning and capo. Check: C, Am7, D/F# and E7#9 in standard and
-   Drop D; unit test that every voicing's notes match the chord; screenshot.
-3. **Chord progression helper.** For the song's key: suggested next
-   chords, substitutions (relative minor/major, secondary dominants,
-   tritone sub, borrowed chords), and a library of common progressions
-   (I-V-vi-IV, ii-V-I, 12-bar blues, 50s, Andalusian, etc.) that insert as
-   chord symbols over selected bars, transposed to the key. Check: unit
-   tests for suggestions in C major and A minor; a 12-bar blues in E
-   inserted correctly.
-4. **Drum step sequencer.** Grid per bar for a drum track (16 or 32 steps,
-   triplet grid option), lanes for kick, snare, side-stick, closed/open/
-   pedal hi-hat, toms, crash, ride, ride bell, plus any other kit piece on
-   demand; velocity/accent per step; copy a bar, fill a section; a pattern
-   library to save and reuse patterns. Works on generated drum tracks too
-   (marks them edited). Check: a pattern built in the grid matches the drum
-   notation (unit test); screenshot.
-5. **Chord chart songs + song-wide changes.** New > Chord chart: type
-   chords per bar ("| C | Am | F G | %"), set sections and repeats, pick a
-   style, and the band panel generates from it. Also key changes,
-   time-signature changes and tempo changes (including gradual
-   accelerando/ritardando) at any bar, respected by playback, the band
-   engine and Rocksmith export. Check: a chart with a key change and a 3/4
-   bar generates and plays (muted); tempo map unit tests.
-6. **Harmony lines.** On a melody track: Add harmony above or below
-   (3rds, 6ths, or octaves), staying in key and following the chord
-   symbols, as a new track. Check: unit test on Ode to Joy that every
-   harmony note is in key and a 3rd/6th from the melody where expected.
-7. **MIDI keyboard.** Web MIDI input with device picker: playing a key
-   sounds the selected track's instrument; step entry (play a note to enter
-   it at the cursor); live recording with count-in, metronome and quantise
-   (none / 1/8 / 1/16 / triplets) into the selected track. No real keyboard
-   in tests: use a simulated MIDI input. Check: simulated input records the
-   expected notes at the expected times (unit test).
-8. **Save/load, undo and regression.** Everything above survives
-   save/reopen (deep-equal) and undoes in one step per action; the Round
-   1-3 app checks still pass on the new exe.
+Dan's check list for Round 4 (For Dan to check):
+- Play an exported song in Rocksmith 2014 (timing, note placement, difficulty levels)
+- Run `dist\musicGenie-0.4.0-portable.exe`. New ▸ Chord chart…: keep the example (or type your
+  own), pick a style, Create: the band plays it. Song ▸ Key, time & tempo changes… to add a
+  3/4 bar or a ritardando.
+- 🎹 Compose ▸ Piano roll: click a track in the list, drag in the grid to draw; Ctrl+Z undoes.
+- ♯ Chords: type E7#9 (or click a chord symbol ▸ Explore…), click diagrams to hear them; with
+  ✎ Edit on, click a beat and press Insert.
+- 🥁 Drum grid on a generated band (or "Add a drum track"); ⇢ Progressions; Harmony… on a track.
+- 🎛 MIDI: plug in a keyboard, pick it, play; Record from the cursor bar (count-in + metronome).
+  Not tried with a real keyboard yet (only simulated input).
+- Known limits: only staff 1 of a multi-staff track is edited in the drum grid; recording over
+  repeats writes onto the repeated bars; step entry uses the cursor beat's length (set it first);
+  chord shapes stop at fret 15; the piano roll edits one staff at a time.
+
+## Current Objective
+Round 4 is done (see above). Wait for Dan's Round 4 check (and the in-game Rocksmith test) before starting Round 5.
 
 ## Next Steps (Do Not Start Yet)
 - **Round 5: production.** Effects (reverb, delay, distortion, EQ,

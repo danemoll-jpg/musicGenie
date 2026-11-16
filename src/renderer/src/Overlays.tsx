@@ -52,6 +52,7 @@ export function ChordPickerPopover({ state, store }: { state: AppState; store: S
       </div>
       <div className="rowx right">
         <button onClick={() => store.setChord(p.bar, p.tick, null)}>Remove</button>
+        <button onClick={() => store.exploreChord(name)} title="All the ways to play it (chord explorer)" data-testid="chord-explore">Explore…</button>
         <button onClick={() => store.openChordPicker(null)}>Cancel</button>
         <button className="primary" data-testid="chord-apply" onClick={() => store.setChord(p.bar, p.tick, name)}>Set {name}</button>
       </div>

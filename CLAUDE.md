@@ -75,6 +75,9 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   `test-results/report-round3.json`. No sound checks. Items 4, 5 and 8 use the private
   reference file `TestData/private/Husker-Du_...psarc` and skip without it; its unpacked
   copies and re-export are deleted at the end of the run.
+- Round 4 app checks: `npm run e2e:r4` (packaged) / `npm run e2e:r4:dev`; report
+  `test-results/report-round4.json`. No sound checks (nothing unmutes). Item 7 drives the
+  MIDI recorder with a simulated input (`mgTest.midiSimulate`); no keyboard needed.
 
 ## Standing facts
 - App flags: `--mute` (master gain 0 before any audio), `--hidden` (off-screen
@@ -101,7 +104,8 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   "use it in your software projects", may repackage). `public/soundfont/` and
   `public/font/` are gitignored (the alphaTab Vite plugin fills them). The user's
   SoundFont path is in `userData/settings.json` and in the project (`playback.soundFont`).
-- Project format v3 (`SCHEMA_VERSION = 3`): v2 = `song.playback` (swing, soundFont),
+- Project format v4 (`SCHEMA_VERSION = 4`; v4 adds `tempos[].ramp` / `tempos[].rampTo` for gradual
+  tempo changes and `song.chart` = the chord chart text). Older: v2 = `song.playback` (swing, soundFont),
   `song.band` (panel setup), `track.generated` (style, role, complexity, seed,
   sectionSeeds, contentHash), `track.derived` (split parts), `chordSymbols[].source`;
   v3 adds `song.backing` (recording: path, offsetMs = where bar 1 starts in it, volume,
@@ -180,20 +184,46 @@ get in his way.
    "Where things stand"), then commit and push.
 Short results: about 20 lines per round, one line per item plus its check.
 
+- Piano roll / drum grid / MIDI takes edit notes as events (`src/model/pianoRoll.ts`):
+  `setStaffNotes` rebuilds ONLY the bars an edit touched (plus bars a tied note crosses), so
+  untouched bars keep their notation. Overlapping notes go to extra voices (`layoutVoices`;
+  alphaTab draws voice 2+ grey). Fretted tracks get string/fret via `assignChord` (capo kept).
+  `splitTicks` writes off-grid lengths as triplets, split at beat boundaries.
+- Live notes (chord explorer, piano-roll keys, drum lanes, MIDI keyboard):
+  `audio/liveSynth.ts` = a SECOND alphaTab `AlphaSynth` on the page thread with a dummy
+  output; we call its internal `synthesizer` (TinySoundFont: channelNoteOn/Off, synthesize)
+  from a ScriptProcessor. alphaTab's own player is in a worker and `playNote` stops the song,
+  so this is the only way to play notes over the song. Goes through the master bus (--mute).
+- Playback ticks vs model ticks: alphaTab plays repeats unrolled. `ScorePlayer.barStartTick`
+  uses `api.tickCache.getMasterBarStart`; `status.songTick` = position folded back onto the
+  model (piano-roll playhead, MIDI recording clock).
+- MIDI recording clock: anchors (performance.now, songTick) from position updates once the
+  count-in is over; note times are mapped at Stop (`MidiRecorder` + `quantizeNotes`), notes
+  before the start bar are dropped. Quantise "none" still snaps to 1/64.
+- Tempo ramps: one tempo point per beat; the first carries `rampTo`, the rest `ramp: true`
+  (`src/model/songChanges.ts`). Time-signature changes refit bars (`fitVoice`) and regenerate
+  the band in the same undo step if no band track was edited.
+- Drum patterns saved by the user live in `userData/settings.json` (`drumPatterns`), the
+  last MIDI input in `midiInput`.
+
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Rounds 1-3 done: import (MusicXML, Guitar Pro, MIDI), score + tab view,
+Rounds 1-4 done: import (MusicXML, Guitar Pro, MIDI), score + tab view,
 playback, instruments, mixer, speed, transpose, undo, autosave; virtual band
 (chord detection, part split, sections, 5 styles, band panel, GeneralUser GS);
 note/tab editing, techniques, tunings + capo, Rocksmith .psarc/.rs2dlc/.xml import with
 the song audio as a synced backing track, offline audio render, Rocksmith export
 (full `_p.psarc` build with Wwise 2023.1.19; not yet tried in the game).
+Round 4 (composition): piano roll, chord explorer, progression helper, drum step
+sequencer, chord-chart songs + key/time/tempo changes, harmony lines, MIDI keyboard
+(`src/renderer/src/Round4.tsx` dock + dialogs, `PianoRoll.tsx`, `DrumGrid.tsx`,
+`ChordExplorer.tsx`, `Progressions.tsx`, `midi.ts`).
 Round 3's in-game Rocksmith test is still pending Dan.
-Now: Round 4 (composition: piano roll, chord explorer, progression helper, drum step
-sequencer, chord-chart songs + key/time/tempo changes, harmony lines, MIDI keyboard) in
-`TODO.md`. Round 1 is archived in `TODO-ARCHIVE.md` (grep it, never read it in full).
+Next: Round 5 (production) in `TODO.md`, after Dan's Round 4 check.
+Round 1 is archived in `TODO-ARCHIVE.md` (grep it, never read it in full).
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
-sections, band engine, noteEdit, tunings, tempo, rocksmith),
+sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
+progressions, drums, songChanges, chart, harmony, recording),
 `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
 `src/main` (Electron, settings.json, Rocksmith helper process), `src/preload`,
 `src/renderer` (React UI, Band panel, dialogs, Round3.tsx edit bar/tuning/export dialog,

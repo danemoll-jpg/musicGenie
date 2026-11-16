@@ -1,7 +1,7 @@
 {
   "name": "musicgenie",
   "productName": "musicGenie",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Desktop music studio: import, arrange, play, and (later) export to Rocksmith 2014",
   "author": "Dan Moll",
   "license": "UNLICENSED",
@@ -20,7 +20,9 @@
     "e2e:r2:dev": "node tests/e2e/round2.mjs --dev",
     "helper": "dotnet publish helpers/rocksmith/MgRocksmith/MgRocksmith.fsproj -c Release -o helpers/rocksmith/bin --nologo -v q -p:NuGetAudit=false",
     "e2e:r3": "node tests/e2e/round3.mjs",
-    "e2e:r3:dev": "node tests/e2e/round3.mjs --dev"
+    "e2e:r3:dev": "node tests/e2e/round3.mjs --dev",
+    "e2e:r4": "node tests/e2e/round4.mjs",
+    "e2e:r4:dev": "node tests/e2e/round4.mjs --dev"
   },
   "dependencies": {
     "@coderline/alphatab": "1.9.0",

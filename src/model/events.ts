@@ -59,6 +59,8 @@ export interface BuildOptions {
   percussion?: boolean;
   /** Fretted instrument tuning: notes get string/fret positions. */
   tuning?: number[];
+  /** Capo fret (frets below it are not used). */
+  capo?: number;
   /** Only build bars in [fromBar, toBar). Default: all. */
   fromBar?: number;
   toBar?: number;
@@ -95,7 +97,7 @@ export function buildMeasures(song: Song, events: NoteEvent[], opts: BuildOption
         for (const e of g.ev) positions.set(e, { string: e.string!, fret: e.fret! });
         continue;
       }
-      const pos = assignChord(g.ev.map((e) => e.pitch), opts.tuning, { aroundFret: around });
+      const pos = assignChord(g.ev.map((e) => e.pitch), opts.tuning, { aroundFret: around, capo: opts.capo ?? 0 });
       const frets: number[] = [];
       g.ev.forEach((e, i) => {
         if (pos[i]) {
@@ -114,7 +116,7 @@ export function buildMeasures(song: Song, events: NoteEvent[], opts: BuildOption
     const be = bs + barTicks(song.bars[bi]);
     const beats: Beat[] = [];
     const rest = (len: number) => {
-      for (const d of splitTicks(len)) beats.push({ duration: d, notes: [] });
+      for (const d of splitTicks(len, cur - bs)) beats.push({ duration: d, notes: [] });
     };
     let cur = bs;
     while (gi < groups.length && groups[gi].end <= bs) gi++;
@@ -125,7 +127,7 @@ export function buildMeasures(song: Song, events: NoteEvent[], opts: BuildOption
       const e = Math.min(g.end, be);
       if (s > cur) rest(s - cur);
       if (e > s) {
-        const pieces = splitTicks(e - s);
+        const pieces = splitTicks(e - s, s - bs);
         const continued = g.start < bs; // started in an earlier bar
         pieces.forEach((d, pi) => {
           const tie = continued || pi > 0;

@@ -32,18 +32,43 @@ const SIMPLE: { ticks: number; d: Duration }[] = (
   ] as [DurationBase, 0 | 1][]
 ).map(([base, dots]) => ({ ticks: durationTicks({ base, dots }), d: { base, dots } }));
 
-/**
- * Split a tick length into notatable durations (greedy, largest first).
- * Anything smaller than a 64th is dropped.
- */
-export function splitTicks(ticks: number): Duration[] {
+const TRIPLETS: { ticks: number; d: Duration }[] = ([2, 4, 8, 16, 32, 64] as DurationBase[]).map((base) => {
+  const d: Duration = { base, dots: 0, tuplet: { num: 3, den: 2 } };
+  return { ticks: durationTicks(d), d };
+});
+
+function greedy(ticks: number, list: { ticks: number; d: Duration }[]): Duration[] {
   const out: Duration[] = [];
   let left = ticks;
   while (left > 0) {
-    const fit = SIMPLE.find((s) => s.ticks <= left);
+    const fit = list.find((s) => s.ticks <= left);
     if (!fit) break;
-    out.push({ ...fit.d });
+    out.push(structuredClone(fit.d));
     left -= fit.ticks;
+  }
+  return out;
+}
+
+/**
+ * Split a tick length into notatable durations (greedy, largest first).
+ * Lengths on the straight grid (multiples of a 64th, starting on it) use plain durations;
+ * anything else (a triplet grid) uses triplet durations, split at quarter-note boundaries so
+ * each piece stays inside one beat. `offset` = where the length starts within the bar.
+ * Anything smaller than a 64th triplet is dropped.
+ */
+export function splitTicks(ticks: number, offset = 0): Duration[] {
+  if (ticks <= 0) return [];
+  if (ticks % 60 === 0 && offset % 60 === 0) return greedy(ticks, SIMPLE);
+  const out: Duration[] = [];
+  let pos = offset;
+  let left = ticks;
+  while (left > 0) {
+    const toBeat = PPQ - (pos % PPQ);
+    const piece = Math.min(left, toBeat);
+    const parts = piece % 60 === 0 && pos % 60 === 0 ? greedy(piece, SIMPLE) : greedy(piece, TRIPLETS);
+    out.push(...parts);
+    pos += piece;
+    left -= piece;
   }
   return out;
 }

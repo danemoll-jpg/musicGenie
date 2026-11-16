@@ -109,3 +109,93 @@ input.num { width: 64px; font: inherit; padding: 2px 4px; border: 1px solid var(
 .path { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; max-width: 330px; }
 .result { border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 4px; background: #fbfaf7; }
 .menu.left { left: 0; right: auto; width: 260px; }
+
+/* Round 4: composer dock, piano roll, drum grid, chord explorer, progressions, MIDI, dialogs */
+.center { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.center .score { flex: 1; min-height: 120px; }
+.dock { height: 340px; flex: none; display: flex; flex-direction: column; border-top: 2px solid var(--line); background: var(--panel); }
+.dock-tabs { display: flex; gap: 4px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); background: #faf9f6; }
+.dock-tabs .close { margin-left: auto; }
+.dock-body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.dock-body > div { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pr-tools { display: flex; flex-wrap: wrap; gap: 5px 8px; align-items: center; padding: 4px 8px; }
+.pr-tools .hint, .dock .hint { color: var(--muted); font-size: 11px; }
+.pr { outline: none; }
+.pr-body { flex: 1; min-height: 0; display: flex; }
+.pr-keys { width: 46px; flex: none; overflow: hidden; border-right: 1px solid var(--line); }
+.pr-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pr-ruler { height: 18px; flex: none; overflow: hidden; background: #faf9f6; border-bottom: 1px solid var(--line); }
+.pr-grid-wrap { flex: 1; min-height: 0; overflow: auto; }
+.pr-vel { height: 64px; flex: none; overflow: hidden; border-top: 1px solid var(--line); background: #fbfaf7; margin-right: 12px; }
+.pr-grid-wrap svg, .pr-vel svg { display: block; cursor: crosshair; }
+.pr-black { fill: #f1f0ec; }
+.pr-out { fill: #e9e6df; opacity: .8; }
+.pr-grid { stroke: #ecebe7; stroke-width: 1; }
+.pr-beat { stroke: #dad8d2; stroke-width: 1; }
+.pr-bar { stroke: #a9a6a0; stroke-width: 1; }
+.pr-note { fill: #3b5bdb; stroke: #1e3a9e; stroke-width: 1; cursor: move; }
+.pr-note.sel { fill: #e8590c; stroke: #a33d00; }
+.pr-note.ghost { fill: #3b5bdb; opacity: .4; }
+.pr-play { stroke: #e8590c; stroke-width: 2; pointer-events: none; }
+.pr-key-w { fill: #fff; stroke: #e3e1dc; }
+.pr-key-b { fill: #3a3a3e; }
+.pr-keylbl { font-size: 9px; text-anchor: end; fill: #6b6b70; pointer-events: none; }
+.pr-barnum { font-size: 10px; fill: #6b6b70; }
+.pr-velbar { stroke: #3b5bdb; stroke-width: 3; }
+.pr-velbar.sel { stroke: #e8590c; }
+.dg-empty { padding: 16px; display: flex; gap: 10px; align-items: center; }
+.dg-grid { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 4px; }
+.dg-grid table { border-collapse: collapse; user-select: none; }
+.dg-grid th { font-weight: 400; font-size: 11px; color: var(--muted); padding: 0 3px; }
+.dg-grid th.lane { text-align: right; white-space: nowrap; cursor: pointer; padding-right: 6px; color: var(--ink); }
+.dg-grid td { width: 22px; height: 16px; border: 1px solid #e3e1dc; background: #fff; cursor: pointer; }
+.dg-grid td.beat { border-left: 2px solid #a9a6a0; }
+.dg-grid td.on { background: #3b5bdb; }
+.dg-grid td.on.acc { background: #c92a2a; }
+.dg-grid td.on.ghost { background: #a5b4fc; }
+input.name { font: inherit; padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; width: 120px; }
+.ce-title { font-size: 16px; margin-left: 6px; }
+.ce-body { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 8px; }
+.ce-group { margin-bottom: 6px; }
+.ce-glabel { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 4px 0; }
+.ce-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.diagram { border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+.diagram.sel, .pv.sel { border-color: #e8590c; box-shadow: 0 0 0 2px rgba(232, 89, 12, .3); }
+.diagram .nut { fill: #1d1d1f; }
+.diagram .fretline { stroke: #bdbab3; }
+.diagram .stringline { stroke: #6b6b70; }
+.diagram .dot { fill: #1d1d1f; }
+.diagram .barre { fill: #1d1d1f; opacity: .85; }
+.diagram .finger { fill: #fff; font-size: 9px; text-anchor: middle; font-weight: 700; }
+.diagram .open { fill: none; stroke: #1d1d1f; }
+.diagram .mark { font-size: 11px; text-anchor: middle; fill: #6b6b70; }
+.diagram .fretnum { font-size: 10px; fill: #6b6b70; }
+.diagram .notes, .pv .notes { font-size: 9px; text-anchor: middle; fill: #6b6b70; color: #6b6b70; }
+.pv { border: 1px solid var(--line); border-radius: 6px; padding: 4px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; align-items: center; background: #fff; }
+.keys .w { fill: #fff; stroke: #bdbab3; }
+.keys .b { fill: #3a3a3e; }
+.keys .on { fill: #3b5bdb; }
+.pg { overflow: auto; }
+.pg-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 3px 8px; }
+.pg-row .lbl { width: 110px; }
+.pchip { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 12px; padding: 0 3px 0 0; background: #fff; }
+.pchip button { border: none; background: transparent; padding: 2px 6px; }
+.pchip .pname { font-weight: 600; }
+.pchip small { color: var(--muted); }
+.pg-preview { font-family: Consolas, monospace; font-size: 12px; }
+.midi { overflow: auto; }
+button.rec { background: #c92a2a; border-color: #c92a2a; }
+button.rec.on { animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: .6; } }
+textarea.chart { font-family: Consolas, monospace; font-size: 13px; width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.chg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px solid var(--line); padding: 8px 0; }
+.chg b { width: 110px; }
+.chg input[type=number] { width: 64px; }
+.track.selected { background: #fff4e6; box-shadow: inset 3px 0 0 #e8590c; }
+select.harm { max-width: 92px; font-size: 11px; }
+code { background: #f1f0ec; padding: 0 3px; border-radius: 3px; }
+.pr-keys { margin-bottom: 65px; }
+select.harm { max-width: 110px; }
+.dock-tabs { overflow-x: auto; }
+.dock-tabs button { white-space: nowrap; padding: 3px 8px; }
+.dg-grid td { height: 15px; }

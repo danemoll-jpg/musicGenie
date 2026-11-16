@@ -5,7 +5,9 @@ import {
   applyDetectedChords, clampCursor, defaultBand, detectChords, editedGeneratedTracks, generateBand, harmonySourceTracks,
   History, newSong, parseProject, regenerate, removeSection, ROLE_NAMES, serializeProject, setBacking, setCapo,
   setChordSymbol, setDisplay, setInstrument, setMixer, setPlayback, setRocksmithExport, setSection, setTuning,
-  songFromRocksmith, splitTrack, transpose, withStyle,
+  songFromRocksmith, splitTrack, transpose, withStyle, chartToSong, addHarmonyTrack, setKeyAt, removeKeyChange,
+  setTimeSignatureAt, setTempoAt, setTempoRamp, removeTempoChange, newTrack, restMeasure, hashOf,
+  type HarmonyInterval, type HarmonyDirection, type DrumPattern,
   type BackingTrack, type BandRole, type BandSettings, type Clip, type Cursor, type DisplayMode, type Mixer,
   type RocksmithExport, type RsImportReport, type RsReadResult, type Song, type StyleId,
 } from '../../model';
@@ -90,7 +92,21 @@ export interface AppState {
   rsExport: RsExportState;
   /** Track whose custom-tuning dialog is open. */
   tuningTrack: string | null;
+  /** Round 4: the track the composer dock works on (index). */
+  selTrack: number;
+  /** Open tab of the composer dock (null = closed). */
+  dock: DockTab | null;
+  /** Chord explorer: chord to show (set by clicking a chord symbol). */
+  explore: string | null;
+  /** New / edit chord chart dialog. */
+  chart: { open: boolean; editing: boolean };
+  /** Key / time / tempo changes dialog (bar to start at). */
+  changesBar: number | null;
+  /** Saved drum patterns (userData/settings.json). */
+  drumPatterns: DrumPattern[];
 }
+
+export type DockTab = 'roll' | 'drums' | 'chords' | 'prog' | 'midi';
 
 type Listener = (s: AppState) => void;
 
@@ -105,6 +121,7 @@ export class Store {
     band: null, confirm: null, chordPicker: null, soundFontPath: null, info: null,
     editMode: false, cursor: null, hasClip: false, busy: null, rsImport: null,
     rsExport: { open: false, running: false, step: null, result: null, error: null }, tuningTrack: null,
+    selTrack: 0, dock: null, explore: null, chart: { open: false, editing: false }, changesBar: null, drumPatterns: [],
   };
   private clip: Clip | null = null;
   /** Tests only: export into this folder instead of Documents\musicGenie\Rocksmith. */
@@ -136,6 +153,7 @@ export class Store {
     this.set({
       song, filePath, fileName, dirty: false, error: null, transposeTotal: 0, loadId: this.state.loadId + 1,
       band, confirm: null, chordPicker: null, info: null, cursor: null, rsImport: null, tuningTrack: null,
+      selTrack: Math.max(0, song.tracks.findIndex((t) => t.display.visible)), changesBar: null,
       rsExport: { open: false, running: false, step: null, result: null, error: null },
     });
     const sf = song.playback?.soundFont;
@@ -401,7 +419,8 @@ export class Store {
   }
   setCursor(c: Cursor | null) {
     const song = this.state.song;
-    this.set({ cursor: c && song ? clampCursor(song, c) : null });
+    const cursor = c && song ? clampCursor(song, c) : null;
+    this.set({ cursor, ...(cursor ? { selTrack: cursor.track } : {}) });
   }
   /** Run a cursor edit as one undoable step; keeps the cursor inside the song. */
   editAt(fn: (s: Song, c: Cursor) => Song, label: string, moveTo?: (s: Song, c: Cursor) => Cursor) {
@@ -452,6 +471,117 @@ export class Store {
   }
   setRsExport(p: Partial<RsExportState>) {
     this.set({ rsExport: { ...this.state.rsExport, ...p } });
+  }
+
+  // ----- Round 4: composition -----
+  setSelTrack(i: number) {
+    const song = this.state.song;
+    if (!song) return;
+    this.set({ selTrack: Math.max(0, Math.min(song.tracks.length - 1, i)) });
+  }
+  openDock(tab: DockTab | null) {
+    this.set({ dock: tab });
+  }
+  exploreChord(name: string | null) {
+    this.set({ explore: name, dock: 'chords', chordPicker: null });
+  }
+  /** Run an edit; report a thrown error in the app instead. */
+  tryEdit(fn: (s: Song) => Song, label: string): boolean {
+    try {
+      this.edit(fn, label);
+      return true;
+    } catch (e) {
+      this.set({ error: (e as Error).message });
+      return false;
+    }
+  }
+  openChart(open: boolean, editing = false) {
+    this.set({ chart: { open, editing } });
+  }
+  /** New > Chord chart: build the song from the chart and generate the band in the chosen style. */
+  createChart(text: string, opts: { title: string; bpm: number; style: StyleId; seed?: number }): string[] {
+    const { song, errors } = chartToSong(text, { title: opts.title, bpm: opts.bpm });
+    const band = withStyle(defaultBand('rock', undefined, opts.seed ?? 1), opts.style);
+    band.players = band.players.map((p) => (p.role === 'lead' ? { ...p, on: false } : p));
+    const full = generateBand(song, band);
+    this.load(full, null, opts.title || 'Chord chart');
+    this.set({ chart: { open: false, editing: false } });
+    return errors;
+  }
+  /** Edit the chart of a chart song: bars, chords, sections and tempos are rebuilt and the band regenerated (one undo step). */
+  rebuildChart(text: string, bpm: number): string[] {
+    if (!this.state.song) return [];
+    let errors: string[] = [];
+    const ok = this.tryEdit((s) => {
+      const r = chartToSong(text, { title: s.title, bpm });
+      errors = r.errors;
+      const band = s.band ?? defaultBand('rock');
+      const fresh: Song = { ...r.song, title: s.title, artist: s.artist, album: s.album, composer: s.composer, playback: s.playback };
+      const sameTs = (i: number) => i < s.bars.length && s.bars[i].timeSignature.numerator === fresh.bars[i].timeSignature.numerator
+        && s.bars[i].timeSignature.denominator === fresh.bars[i].timeSignature.denominator;
+      fresh.tracks = s.tracks.filter((t) => !t.generated).map((t) => ({
+        ...t, staves: t.staves.map((st) => ({ ...st, measures: fresh.bars.map((b, i) => (sameTs(i) ? st.measures[i] : restMeasure(b))) })),
+      }));
+      return generateBand(fresh, band);
+    }, 'Edit chord chart');
+    if (ok) this.set({ chart: { open: false, editing: false } });
+    return errors;
+  }
+  openChanges(bar: number | null) {
+    this.set({ changesBar: bar });
+  }
+  setKeyChange(bar: number, fifths: number, mode: 'major' | 'minor') {
+    this.tryEdit((s) => setKeyAt(s, bar, fifths, mode), 'Key change at bar ' + (bar + 1));
+  }
+  removeKeyChange(bar: number) {
+    this.tryEdit((s) => removeKeyChange(s, bar), 'Remove key change');
+  }
+  /** Time signature change; band tracks nobody edited are regenerated in the same step. */
+  setTimeSig(bar: number, num: number, den: number, count?: number) {
+    this.tryEdit((s) => {
+      const regen = !!s.band && s.tracks.some((t) => t.generated) && editedGeneratedTracks(s).length === 0;
+      let n = setTimeSignatureAt(s, bar, num, den, count);
+      if (regen) n = generateBand(n, n.band!);
+      return n;
+    }, 'Time signature ' + num + '/' + den + ' at bar ' + (bar + 1));
+  }
+  setTempoChange(bar: number, bpm: number, ramp?: { toBar: number; toBpm: number }) {
+    this.tryEdit((s) => (ramp ? setTempoRamp(s, bar, ramp.toBar, ramp.toBpm, bpm) : setTempoAt(s, bar, bpm)),
+      ramp ? (ramp.toBpm > bpm ? 'Accelerando' : 'Ritardando') + ' from bar ' + (bar + 1) : 'Tempo ' + bpm + ' at bar ' + (bar + 1));
+  }
+  removeTempoChange(bar: number) {
+    this.tryEdit((s) => removeTempoChange(s, bar), 'Remove tempo change');
+  }
+  addHarmony(trackId: string, interval: HarmonyInterval, dir: HarmonyDirection) {
+    this.tryEdit((s) => addHarmonyTrack(s, trackId, interval, dir), 'Add harmony');
+  }
+  /** Add an empty drum kit track (for the step sequencer). */
+  addDrumTrack() {
+    const ok = this.tryEdit((s) => {
+      const n = structuredClone(s);
+      let id = 'drums';
+      for (let k = 2; n.tracks.some((t) => t.id === id); k++) id = 'drums' + k;
+      n.tracks.push(newTrack(id, 'Drums', 0, true, [{ clef: 'neutral', measures: n.bars.map((b) => restMeasure(b)) }]));
+      return n;
+    }, 'Add drum track');
+    if (ok) this.set({ selTrack: this.state.song!.tracks.length - 1 });
+  }
+  async loadDrumPatterns() {
+    const st = (await window.mg.settingsGet()) as { drumPatterns?: DrumPattern[] };
+    this.set({ drumPatterns: st.drumPatterns ?? [] });
+  }
+  async saveDrumPattern(p: DrumPattern) {
+    const list = [...this.state.drumPatterns.filter((x) => x.name !== p.name), p];
+    await window.mg.settingsSet({ drumPatterns: list });
+    this.set({ drumPatterns: list, info: 'Pattern "' + p.name + '" saved.' });
+  }
+  async deleteDrumPattern(name: string) {
+    const list = this.state.drumPatterns.filter((x) => x.name !== name);
+    await window.mg.settingsSet({ drumPatterns: list });
+    this.set({ drumPatterns: list });
+  }
+  showInfo(msg: string) {
+    this.set({ info: msg });
   }
 
   // ----- autosave / recovery -----

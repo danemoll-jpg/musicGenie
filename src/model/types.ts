@@ -26,6 +26,8 @@ export interface Song {
   backing?: BackingTrack;
   /** Last "Export to Rocksmith" settings (schema v3+). */
   rocksmith?: RocksmithExport;
+  /** Schema v4: the chord chart this song was made from (New > Chord chart). */
+  chart?: { text: string };
 }
 
 export interface BackingTrack {
@@ -121,6 +123,10 @@ export interface TempoChange {
   tick: number;
   /** Quarter notes per minute. */
   bpm: number;
+  /** Schema v4: a point inside a gradual tempo change (written per beat). */
+  ramp?: boolean;
+  /** Schema v4: this point starts a gradual change reaching `bpm` at the start of `bar`. */
+  rampTo?: { bar: number; bpm: number };
 }
 
 export interface Section {

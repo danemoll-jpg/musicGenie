@@ -11,6 +11,9 @@ export interface AppSettings {
   soundFont: string | null;
   rocksmithDlc?: string | null;
   author?: string | null;
+  /** Round 4: saved drum patterns (DrumPattern[]) and the last MIDI input. */
+  drumPatterns?: unknown[];
+  midiInput?: string | null;
 }
 
 // Read synchronously so the renderer knows about --mute before any audio code runs.

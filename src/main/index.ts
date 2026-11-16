@@ -42,6 +42,9 @@ interface AppSettings {
   rocksmithDlc?: string | null;
   /** Charter name written into exported Rocksmith songs. */
   author?: string | null;
+  /** Saved drum-sequencer patterns and the last MIDI input (Round 4). */
+  drumPatterns?: unknown[];
+  midiInput?: string | null;
 }
 const settingsFile = () => join(app.getPath('userData'), 'settings.json');
 function readSettings(): AppSettings {

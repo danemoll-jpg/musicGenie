@@ -1,16 +1,46 @@
 // window.mgTest: driven by tests/e2e (only installed with --hidden).
 import {
-  countNoteOnsets, serializeProject, songLengthMs, tempoPoints, tickAtMs, trackEvents, type BandRole, type BandSettings, type Cursor,
+  countNoteOnsets, serializeProject, staffNotes, tempoChanges, songLengthMs, tempoPoints, tickAtMs, trackEvents, type BandRole, type BandSettings, type Cursor,
   type RocksmithExport, type StyleId,
 } from '../../model';
 import type { BackingPlayer } from './audio/backing';
+import { liveSynth } from './audio/liveSynth';
+import type { MidiController } from './midi';
+import type { DockTab } from './store';
 import { getMasterGain, measureLevels, setMasterGain } from './audio/masterBus';
 import { renderMix, wavBytes, wavLengthMs } from './audio/render';
 import type { ScorePlayer } from './player';
 import { exportRocksmith } from './rocksmithExport';
 import type { Store } from './store';
 
-export function installTestApi(store: Store, getPlayer: () => ScorePlayer | null, getBacking: () => BackingPlayer | null = () => null) {
+export function installTestApi(store: Store, getPlayer: () => ScorePlayer | null, getBacking: () => BackingPlayer | null = () => null, midi?: MidiController) {
+  const frame = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  const setValue = (el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, v: string) => {
+    const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, v);
+    el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
+  };
+  const q = <T extends Element>(sel: string) => {
+    const el = document.querySelector(sel) as T | null;
+    if (!el) throw new Error('No element ' + sel);
+    return el;
+  };
+  /** Pointer gesture on the piano-roll grid at model positions (ticks, pitches). */
+  const rollPoint = (tick: number, pitch: number) => {
+    const svg = q<SVGSVGElement>('[data-testid="roll-grid"]');
+    const ppq = Number(svg.dataset.ppq);
+    const row = Number(svg.dataset.row);
+    const hi = Number(svg.dataset.hi);
+    const wrap = svg.parentElement as HTMLElement;
+    const px = (tick / 960) * ppq;
+    const py = (hi - pitch) * row + row / 2;
+    if (px < wrap.scrollLeft || px > wrap.scrollLeft + wrap.clientWidth - 20) wrap.scrollLeft = Math.max(0, px - 40);
+    if (py < wrap.scrollTop || py > wrap.scrollTop + wrap.clientHeight - 20) wrap.scrollTop = Math.max(0, py - wrap.clientHeight / 2);
+    const r = svg.getBoundingClientRect();
+    return { svg, clientX: r.left + px, clientY: r.top + py };
+  };
+  const pointer = (el: Element, type: string, x: number, y: number, mods: { shift?: boolean } = {}) =>
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, button: 0, buttons: type === 'pointerup' ? 0 : 1, shiftKey: !!mods.shift }));
   const player = () => {
     const p = getPlayer();
     if (!p) throw new Error('player not created yet');
@@ -172,6 +202,77 @@ export function installTestApi(store: Store, getPlayer: () => ScorePlayer | null
     async exportRocksmith(settings: RocksmithExport, outDir: string) {
       return exportRocksmith(player(), store.state.song!, settings, { outDir });
     },
+    // ----- Round 4 -----
+    openDock: (tab: DockTab | null) => store.openDock(tab),
+    setSelTrack: (i: number) => store.setSelTrack(i),
+    /** Draw a note with the mouse in the piano roll (start/end are snapped by the roll's grid). */
+    async rollDraw(start: number, pitch: number, dur: number) {
+      const a = rollPoint(start + 1, pitch);
+      pointer(a.svg, 'pointerdown', a.clientX + 1, a.clientY);
+      await frame();
+      const b = rollPoint(start + dur - 1, pitch);
+      pointer(b.svg, 'pointermove', b.clientX - 1, b.clientY);
+      await frame();
+      pointer(b.svg, 'pointerup', b.clientX - 1, b.clientY);
+      await frame();
+    },
+    /** Drag in the piano roll from one (tick, pitch) to another (moves the note under the mouse). */
+    async rollDrag(t1: number, p1: number, t2: number, p2: number) {
+      const a = rollPoint(t1, p1);
+      pointer(a.svg, 'pointerdown', a.clientX, a.clientY);
+      await frame();
+      const b = rollPoint(t2, p2);
+      pointer(b.svg, 'pointermove', b.clientX, b.clientY);
+      await frame();
+      pointer(b.svg, 'pointerup', b.clientX, b.clientY);
+      await frame();
+    },
+    async rollSnap(id: string) {
+      setValue(q<HTMLSelectElement>('[data-testid="roll-snap"]'), id);
+      await frame();
+    },
+    rollNotes(trackIndex?: number) {
+      const s = store.state.song!;
+      return staffNotes(s, trackIndex ?? store.state.selTrack, 0).map((e) => [e.start, e.dur, e.pitch, e.velocity, e.string ?? null, e.fret ?? null]);
+    },
+    async drumClick(pitch: number, step: number, mods: { shift?: boolean; alt?: boolean } = {}) {
+      q('[data-cell="' + pitch + ':' + step + '"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, shiftKey: !!mods.shift, altKey: !!mods.alt }));
+      await frame();
+    },
+    click: async (testId: string) => {
+      const el = q<HTMLElement>('[data-testid="' + testId + '"]');
+      if ((el as HTMLButtonElement).disabled) throw new Error(testId + ' is disabled');
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await frame();
+    },
+    setField: async (testId: string, value: string) => {
+      setValue(q<HTMLInputElement>('[data-testid="' + testId + '"]'), value);
+      await frame();
+    },
+    text: (testId: string) => q<HTMLElement>('[data-testid="' + testId + '"]').textContent,
+    count: (sel: string) => document.querySelectorAll(sel).length,
+    exploreChord: (name: string | null) => store.exploreChord(name),
+    liveNotesPlayed: () => liveSynth.notesPlayed,
+    async harmony(trackIndex: number, value: string) {
+      const row = document.querySelectorAll('.tracks .track[data-track]')[trackIndex];
+      const sel = row?.querySelector('[data-testid="harmony-menu"]') as HTMLSelectElement;
+      if (!sel) throw new Error('no harmony menu on track ' + trackIndex);
+      setValue(sel, value);
+      await frame();
+    },
+    openChart: (open: boolean) => store.openChart(open),
+    keyChange: (bar: number, fifths: number, mode: 'major' | 'minor') => store.setKeyChange(bar, fifths, mode),
+    timeSig: (bar: number, num: number, den: number, count?: number) => store.setTimeSig(bar, num, den, count),
+    tempoChange: (bar: number, bpm: number, ramp?: { toBar: number; toBpm: number }) => store.setTempoChange(bar, bpm, ramp),
+    tempoChanges: () => tempoChanges(store.state.song!),
+    openChanges: (bar: number | null) => store.openChanges(bar),
+    midiState: () => midi?.state,
+    midiOptions: (p: Parameters<MidiController['setOptions']>[0]) => midi?.setOptions(p),
+    midiRecord: () => midi?.startRecording(),
+    midiStop: () => midi?.stopRecording(),
+    midiSimulate: (msgs: { delay: number; data: number[] }[]) => midi?.simulate(msgs),
+    midiReceived: () => midi?.received ?? 0,
+    undoLabel: () => store.state.undoLabel,
     scrollScoreToBar(bar: number) {
       const p = player();
       const lookup = p.api.boundsLookup;

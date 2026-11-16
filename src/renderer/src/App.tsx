@@ -6,13 +6,16 @@ import { editorKey } from './editor';
 import { ChordPickerPopover, ConfirmDialog, SettingsMenu } from './Overlays';
 import { DEFAULT_SOUNDFONT, ScorePlayer, type PlayerStatus } from './player';
 import { BackingRow, CursorOverlay, EditBar, RocksmithDialog, TuningControls, TuningDialog } from './Round3';
+import { ChangesDialog, ChartDialog, Dock, HarmonyMenu } from './Round4';
+import { liveSynth } from './audio/liveSynth';
+import type { MidiController } from './midi';
 import type { AppState, Store } from './store';
 
 function useStore(store: Store): AppState {
   return useSyncExternalStore((f) => store.on(f), () => store.state);
 }
 
-export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlayer, b: BackingPlayer) => void }) {
+export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: ScorePlayer, b: BackingPlayer) => void; midi: MidiController }) {
   const state = useStore(store);
   const hostRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -20,6 +23,7 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
   const [status, setStatus] = useState<PlayerStatus | null>(null);
   const [showBand, setShowBand] = useState(true);
   const [newMenu, setNewMenu] = useState(false);
+  const [songMenu, setSongMenu] = useState(false);
   const loadedSoundFont = useRef<string | null>(null);
   const backingRef = useRef<BackingPlayer | null>(null);
 
@@ -54,9 +58,12 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
     loadedSoundFont.current = want;
     if (want) {
       window.mg.readFile(want)
-        .then((f) => player.setSoundFont(f.bytes, f.name))
+        .then((f) => { player.setSoundFont(f.bytes, f.name); liveSynth.setSoundFont(f.bytes, f.name); })
         .catch((e) => store.showError('Could not load the SoundFont: ' + (e as Error).message));
-    } else player.setSoundFont(null, DEFAULT_SOUNDFONT);
+    } else {
+      player.setSoundFont(null, DEFAULT_SOUNDFONT);
+      liveSynth.setSoundFont(null, DEFAULT_SOUNDFONT);
+    }
   }, [player, state.soundFontPath]);
 
   // Click a chord symbol in the score -> chord picker.
@@ -144,6 +151,7 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
               <div className="menu left" onMouseLeave={() => setNewMenu(false)}>
                 <button onClick={() => { setNewMenu(false); store.newSong('guitar'); }}>Guitar song (6 strings, tab + notation)</button>
                 <button onClick={() => { setNewMenu(false); store.newSong('bass'); }}>Bass song (4 strings, tab)</button>
+                <button onClick={() => { setNewMenu(false); store.openChart(true); }} data-testid="new-chart">Chord chart… (type chords, the band plays)</button>
               </div>
             )}
           </div>
@@ -192,6 +200,17 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
         <div className="group">
           <button className={state.editMode ? 'chip' : ''} disabled={!song} data-testid="edit-toggle"
             title="Edit notes: click a beat, type frets (tab) or A-G (notation)" onClick={() => store.setEditMode(!state.editMode)}>✎ Edit</button>
+          <div className="menu-wrap">
+            <button disabled={!song} onClick={() => setSongMenu(!songMenu)} title="Key, time signature and tempo changes; chord chart">Song ▾</button>
+            {songMenu && song && (
+              <div className="menu left" onMouseLeave={() => setSongMenu(false)}>
+                <button onClick={() => { setSongMenu(false); store.openChanges(state.cursor?.bar ?? status?.range?.startBar ?? status?.currentBar ?? 0); }} data-testid="open-changes">Key, time & tempo changes…</button>
+                {song.chart && <button onClick={() => { setSongMenu(false); store.openChart(true, true); }}>Edit chord chart…</button>}
+              </div>
+            )}
+          </div>
+          <button className={state.dock ? 'chip' : ''} disabled={!song} data-testid="compose-toggle" title="Piano roll, drum grid, chord explorer, progressions, MIDI keyboard"
+            onClick={() => store.openDock(state.dock ? null : 'roll')}>🎹 Compose</button>
           <button disabled={!song} data-testid="rs-open" title="Export guitar/bass parts as a Rocksmith 2014 song" onClick={() => store.openRsExport(true)}>⇪ Rocksmith…</button>
         </div>
         <div className="group right">
@@ -202,13 +221,15 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
       <EditBar state={state} store={store} player={player} />
       <TuningDialog state={state} store={store} />
       <RocksmithDialog state={state} store={store} player={player} />
+      <ChartDialog state={state} store={store} />
+      <ChangesDialog state={state} store={store} />
       <div className="main">
         <aside className="tracks">
           <div className="tracks-head">
             <div className="title" title={song?.title}>{song ? song.title : 'No song open'}</div>
             {song && <div className="sub">{song.bars.length} bars · {song.tracks.length} tracks · {song.tempos[0]?.bpm} bpm{state.dirty ? ' · unsaved' : ''}</div>}
           </div>
-          {song?.tracks.map((t) => <TrackRow key={t.id} track={t} store={store} />)}
+          {song?.tracks.map((t, i) => <TrackRow key={t.id} track={t} store={store} index={i} selected={!!state.dock && i === state.selTrack} />)}
           {song && <BackingRow song={song} store={store} />}
           {!song && (
             <div className="empty">
@@ -217,11 +238,14 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
             </div>
           )}
         </aside>
-        <section className="score" ref={scrollRef}>
-          <div ref={hostRef} className="at-host" />
-          <CursorOverlay state={state} player={player} status={status} />
-          <ChordPickerPopover state={state} store={store} />
-        </section>
+        <div className="center">
+          <section className="score" ref={scrollRef}>
+            <div ref={hostRef} className="at-host" />
+            <CursorOverlay state={state} player={player} status={status} />
+            <ChordPickerPopover state={state} store={store} />
+          </section>
+          <Dock state={state} store={store} status={status} midi={midi} />
+        </div>
         {showBand && song && <BandPanel state={state} store={store} status={status} />}
       </div>
       <footer className="status">
@@ -236,10 +260,10 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
   );
 }
 
-function TrackRow({ track: t, store }: { track: Track; store: Store }) {
+function TrackRow({ track: t, store, index, selected }: { track: Track; store: Store; index: number; selected: boolean }) {
   const fretted = !!t.tuning;
   return (
-    <div className={`track ${t.display.visible ? '' : 'hidden'}`} data-track={t.id}>
+    <div className={`track ${t.display.visible ? '' : 'hidden'} ${selected ? 'selected' : ''}`} data-track={t.id} onMouseDown={() => store.setSelTrack(index)}>
       <div className="row1">
         <input type="checkbox" checked={t.display.visible} title="Show this track"
           onChange={(e) => store.setDisplay(t.id, { visible: e.target.checked })} />
@@ -279,12 +303,15 @@ function TrackRow({ track: t, store }: { track: Track; store: Store }) {
           <input type="range" min={-1} max={1} step={0.1} value={t.mixer.pan}
             onChange={(e) => store.setMixer(t.id, { pan: Number(e.target.value) })} />
         </label>
+      </div>
+      <div className="row3">
         {!t.instrument.percussion && !t.generated && (
           <button className="split" title="Split into band parts: melody, harmony, bass (this track is kept, muted)"
             onClick={() => store.splitTrack(t.id)}>Split</button>
         )}
+        <HarmonyMenu track={t} store={store} />
         {!t.instrument.percussion && (
-          <span className="tr" title="Transpose this track">
+          <span className="tr" title="Transpose this track"><span className="lbl">Transpose </span>
             <button onClick={() => store.transpose(-1, t.id)}>−</button>
             <button onClick={() => store.transpose(1, t.id)}>+</button>
           </span>

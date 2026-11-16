@@ -12,6 +12,8 @@ export interface PlayerStatus {
   playing: boolean;
   currentBar: number;
   tick: number;
+  /** The play position in model ticks (repeats folded back onto their bars). */
+  songTick: number;
   endTick: number;
   looping: boolean;
   range: { startBar: number; endBar: number } | null;
@@ -50,7 +52,7 @@ export class ScorePlayer {
   private renderedVolumes: number[] = [];
   private resumeAfterLoad: { tick: number; play: boolean } | null = null;
   status: PlayerStatus = {
-    ready: false, playing: false, currentBar: 0, tick: 0, endTick: 0, looping: false, range: null, renderCount: 0,
+    ready: false, playing: false, currentBar: 0, tick: 0, songTick: 0, endTick: 0, looping: false, range: null, renderCount: 0,
     soundFont: DEFAULT_SOUNDFONT, soundFontLoads: 0, swing: 0,
   };
   private swing = 0;
@@ -93,7 +95,7 @@ export class ScorePlayer {
     // Swing is a playback feel: shift off-beat 8ths in the generated MIDI, never in the score.
     a.midiLoad.on((file) => applySwing(file as unknown as Parameters<typeof applySwing>[0], this.swing));
     a.playerStateChanged.on((e) => this.update({ playing: e.state === alphaTab.synth.PlayerState.Playing }));
-    a.playerPositionChanged.on((e) => this.update({ tick: e.currentTick, endTick: e.endTick }));
+    a.playerPositionChanged.on((e) => this.update({ tick: e.currentTick, songTick: this.modelTick(e.currentTick), endTick: e.endTick }));
     a.playedBeatChanged.on((beat) => this.update({ currentBar: beat.voice.bar.index }));
     a.error.on((e) => console.error('alphaTab error:', e?.message ?? e, e?.stack ?? ''));
     a.renderFinished.on(() => this.update({ renderCount: this.status.renderCount + 1 }));
@@ -277,9 +279,14 @@ export class ScorePlayer {
   }
   pause() {
     this.api.pause();
+    // The worker reports the new state later; a re-render before that must not resume playback.
+    this.resumeAfterLoad = null;
+    this.update({ playing: false });
   }
   stop() {
     this.api.stop();
+    this.resumeAfterLoad = null;
+    this.update({ playing: false });
     this.update({ currentBar: this.api.playbackRange ? this.status.range?.startBar ?? 0 : 0 });
   }
   setLooping(on: boolean) {
@@ -296,8 +303,30 @@ export class ScorePlayer {
     this.api.countInVolume = on ? 1 : 0;
   }
 
+  /** Playback tick where a bar first plays (alphaTab plays repeats unrolled). */
   barStartTick(bar: number): number {
-    return this.api.score?.masterBars[bar]?.start ?? 0;
+    const mb = this.api.score?.masterBars[bar];
+    if (!mb) return 0;
+    try {
+      return this.api.tickCache?.getMasterBarStart(mb) ?? mb.start;
+    } catch {
+      return mb.start;
+    }
+  }
+
+  /** Playback tick -> model tick (a repeated bar maps back onto its own bar). */
+  modelTick(playTick: number): number {
+    const lookups = this.api.tickCache?.masterBars;
+    if (!lookups?.length) return playTick;
+    let lo = 0;
+    let hi = lookups.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lookups[mid].start <= playTick) lo = mid;
+      else hi = mid - 1;
+    }
+    const l = lookups[lo];
+    return l.masterBar.start + Math.max(0, playTick - l.start);
   }
 
   seekBar(bar: number) {
