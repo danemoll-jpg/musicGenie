@@ -188,7 +188,10 @@ playback, instruments, mixer, speed, transpose, undo, autosave; virtual band
 note/tab editing, techniques, tunings + capo, Rocksmith .psarc/.rs2dlc/.xml import with
 the song audio as a synced backing track, offline audio render, Rocksmith export
 (full `_p.psarc` build with Wwise 2023.1.19; not yet tried in the game).
-Next: Round 4 (composition) in `TODO.md`, after Dan's Round 3 check.
+Round 3's in-game Rocksmith test is still pending Dan.
+Now: Round 4 (composition: piano roll, chord explorer, progression helper, drum step
+sequencer, chord-chart songs + key/time/tempo changes, harmony lines, MIDI keyboard) in
+`TODO.md`. Round 1 is archived in `TODO-ARCHIVE.md` (grep it, never read it in full).
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith),
 `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,

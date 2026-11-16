@@ -8,48 +8,7 @@
 - One check per item, done in the built app, with screenshots you look at.
 
 ## Completed Tasks
-### Round 1, "import it, see it, hear it with other instruments" (2026-11-16): DONE, Dan checked (no issues found, 2026-11-16)
-All checks ran in the built app, hidden (off-screen, never shown/focusable) and
-`--mute`; speaker level (post-gain analyser) measured 0 on every playing step.
-Unit tests: 24/24 pass (`npm test`). Screenshots: `test-results/*.png`.
-1. Project setup: **done.** Electron 45 + TS + electron-vite (Vite 8) + React 19,
-   Vitest, `.gitignore`, `npm run dist` -> portable exe + `win-unpacked`, `--mute`,
-   Playwright harness (`tests/e2e`). Check: packaged exe hidden + focused=false,
-   playing: pre-gain peak 0.61, speaker peak **0**.
-2. Model + .mgproj: **done.** Song/bars/tempo map/sections/chords/lyrics,
-   tracks (instrument, tuning, capo, mixer, display), staves/measures/voices/beats/
-   notes with string, fret and all listed techniques. Check: save -> reopen is
-   deep-equal for all 4 test songs; schemaVersion 99 rejected with a clear message.
-3. Import: **done.** Counts match the source: MusicXML 1/16/108 (tracks/measures/
-   notes, independent XML count), GP7 11/96/4422, GP5 1/2/20, GP3 1/1/28,
-   MIDI 2/35/549 (vs @tonejs/midi). Sources in `TestData/README.md`.
-4. Score view: **done.** Per-track show/hide and notation/tab/both. Check:
-   piano notation (both hands) and GP acoustic guitar as notation + tab screenshots.
-5. Playback: **done.** Play/pause/stop, cursor + note highlight, click a beat to
-   play from there, drag-select bars + Loop, metronome, count-in. Check: cursor in
-   bar 3 at screenshot; pause holds; seek -> bar 9; loop stayed in bars 5-6.
-6. Tracks panel: **done.** Grouped instrument picker (8 groups), M/S, volume, pan,
-   per-track transpose. Check: piano -> electric guitar leaves notes identical
-   (unit + app). **Sound check: item 6 step, unmuted 2.06 s** (speaker peak 0.32,
-   0 after). A first 3 s attempt also played; its "after" reading failed on
-   analyser lag, harness fixed.
-7. Speed + transpose: **done.** Speed 25-150% (practice only). Check: 50% plays at
-   0.50x tick rate, song unchanged; +2 raises all 108 pitches by 2, C -> D major,
-   chord C -> D; frets re-placed to playable positions (unit tests).
-8. Undo/redo + autosave: **done.** Every edit undoable (Ctrl+Z / Ctrl+Y), autosave
-   every 2 min, restore banner after a crash. Check: unit + app undo/redo exact;
-   killed the app after autosave, relaunch showed the restore offer, restore worked.
-
-Dan's check list for Round 1 (done):
-- Run `dist\musicGenie-0.1.0-portable.exe` (or `npm run dev`). Open
-  `TestData\ode-to-joy-piano.musicxml`, press Play: does it sound right and does
-  the cursor follow? Then switch Piano to Electric Guitar and to a guitar view.
-- Open `TestData\full-song.gp`: hide tracks, switch a guitar to Tab/Both.
-- Drag across bars, tick Loop; try Speed 50%; Transpose +2; Undo.
-- Known limits: MIDI import quantises to 16ths (no triplets yet) and holds only
-  one voice per staff; the default sonivox SoundFont sounds basic; app has the
-  default Electron icon; exe is unsigned (SmartScreen may warn).
-
+Round 1 is archived in `TODO-ARCHIVE.md` (grep it, never read it in full).
 ### Round 2, "virtual band v1" (2026-11-16): DONE, Dan moved on to Round 3 with no issues reported
 Checks ran in the packaged app (`npm run e2e:r2`), hidden (off-screen, never shown or
 focusable) and `--mute`; speaker level measured 0 on every playing step. Unit tests 84/84
@@ -103,7 +62,7 @@ Dan's check list for Round 2 (fill in what you find):
   no note editing yet (Round 3/4); swing moves off-beat 8ths only; band parts never
   cross barlines; lead = the top line of the play-along track.
 
-### Round 3, "tab editing + Rocksmith" (2026-11-16): DONE (Wwise step finished after Dan installed Wwise 2023.1.19)
+### Round 3, "tab editing + Rocksmith" (2026-11-16): DONE in the app; in-game Rocksmith test still pending Dan
 Checks ran in the packaged app (`npm run e2e:r3`), hidden (off-screen, never shown or
 focusable) and `--mute`; speaker level measured 0 on every playing step (techniques
 playback pre 0.14, backing track pre 0.66, offline render 0). **No sound checks this round.**
@@ -145,7 +104,8 @@ Screenshots: `test-results/r3-*.png`; report `test-results/report-round3.json`.
    audio. Reference bass import -> export (full .psarc build): 541 notes out, 541 in the
    written XML, 0 check issues; that copy is deleted after the check.
 
-Dan's check list for Round 3:
+Dan's check list for Round 3 (For Dan to check):
+- Play an exported song in Rocksmith 2014 (timing, note placement, difficulty levels)
 - Run `dist\musicGenie-0.3.0-portable.exe` (or `npm run dev`). New ▸ Bass song: click a beat,
   type frets (1 then 2 quickly = 12), ←→ beats, ↑↓ strings, `]`/`[` shorter/longer, `.` dot;
   try the technique buttons (or H, S, B, V, M, X, N, T...). Ctrl+Z undoes each step.
@@ -168,92 +128,64 @@ Dan's check list for Round 3:
   triplets); a Rocksmith import's tempo changes every beat (only big changes are drawn);
   the exported song gets a ~2 s count-in bar and a 1-bar ending.
 
-<details><summary>Round 3 plan (as given)</summary>
-
-Facts for this round:
-- Dan installed Audiokinetic Wwise on 2026-11-16 (version not recorded; find
-  it and note the path and version in `CLAUDE.md`). DLC Builder supports Wwise
-  2019 and 2021.
-- Reference file: `TestData/private/Husker-Du_Could-You-Be-The-One_v1_p.psarc`
-  (bass arrangement, 7 difficulty levels, made with Toolkit 2.9.2 + EOF).
-  It is a copyrighted song: `TestData/private/` is git-ignored, never commit
-  it, and never copy its audio or chart into other test files.
-- Rocksmith limits: 6-string guitar and 4-string bass only (tunings are
-  per-string offsets from standard, capo allowed). Export refuses other
-  instruments with a clear message.
-- Rocksmith2014.NET (iminashi, GitHub) has the .psarc read/write, SNG
-  conversion, difficulty-level generation, arrangement checks and Wwise
-  conversion that DLC Builder uses. Check its licence and note it in
-  `CLAUDE.md`. Use its NuGet packages if published; otherwise add it as a git
-  submodule pinned to a release tag.
-
-1. **Note editing (tab and staff).** Click a beat to select it. On a tab:
-   type fret numbers on the selected string, arrows move between strings and
-   beats. On a staff: letters A-G enter notes, up/down change pitch.
-   Durations (whole to 64th), dots, ties, triplets, rests, delete,
-   copy/paste and insert/delete bars. Every edit is undoable and marks a
-   generated track as edited. Check: unit tests for each edit; screenshot of
-   a riff entered on a bass tab.
-2. **Techniques.** A palette (and shortcuts) for hammer-on, pull-off, slide
-   (to a fret / unpitched), bend (amount + release), vibrato, palm mute, fret
-   mute, harmonic, pinch harmonic, tap, slap, pop, accent, tremolo. Shown on
-   the tab and played back where alphaTab supports it. Check: screenshot of
-   each technique on a tab; save/reopen keeps them.
-3. **Tunings and capo.** Per-track tuning presets (Standard, Drop D, Eb
-   Standard, D Standard, Drop C, Open G/D/E...) plus custom, and capo.
-   Changing the tuning keeps the pitches and re-places frets (or keeps frets
-   and changes pitches, user's choice). Check: unit test; Drop D screenshot.
-4. **.NET Rocksmith helper.** `helpers/rocksmith/`: .NET 8 console app built
-   alongside the app (put the command in `CLAUDE.md`), talking to Electron
-   over JSON on stdin/stdout. Commands: read a .psarc, write a .psarc,
-   check an arrangement, find Wwise. Check: the helper reads the reference
-   file and lists its contents.
-5. **.psarc import.** File > Open accepts .psarc. Each arrangement (lead,
-   rhythm, bass) becomes a track with its tuning, capo, the hardest
-   difficulty level's notes, chords and techniques, sections and chord
-   names; Rocksmith's beat markers become our bars and tempo map. The song's
-   audio becomes a **backing track** that plays in sync with the cursor,
-   with its own volume and mute in the tracks panel (alphaTab's backing-track
-   / external media sync if it has one, otherwise sync an audio element to
-   the player position). Check: reference file imports; note count equals
-   the hardest level in the source XML; screenshot of the bass tab;
-   hidden, muted run shows the backing audio playing (pre-gain level above 0)
-   and in sync with the cursor at 30 s.
-6. **Audio for export.** Render the song to a WAV file offline (faster than
-   real time if alphaTab can, otherwise a muted real-time recording of the
-   pre-gain signal). Choose: full mix, mix without the parts being exported,
-   or a loaded recording (WAV/MP3/OGG/FLAC) with an offset to line it up.
-   Check: the rendered WAV length matches the song length within 50 ms.
-7. **Rocksmith export.** File > Export to Rocksmith: pick the guitar/bass
-   tracks and their arrangement type (Lead / Rhythm / Bass, one can be
-   Bonus); song info (title, artist, album, year, album art image); preview
-   start time; a default tone per arrangement. Writes the arrangement with
-   notes, chords + chord fingerings, techniques, beats, sections and phrases
-   (our section names mapped to Rocksmith's, with the required COUNT and END
-   phrases), auto hand positions and generated difficulty levels; runs the
-   helper's arrangement checks and shows any problems; converts the audio
-   with Wwise; writes `<Artist>_<Title>_v1_p.psarc`. Option: copy it straight
-   into Rocksmith 2014's `dlc` folder (find the Steam path, let Dan change
-   it). **If Wwise can't be found or fails, stop at that step**: keep the
-   arrangement files, the WAV and a DLC Builder project (.rs2dlc) so it can
-   be finished by hand, and report it. Check: export the Round 2 Rock bass and
-   guitar from Ode to Joy; the arrangement checks report no errors.
-8. **Round trip.** Import the exported .psarc back into the app: notes,
-   techniques, sections and tuning match what was exported (unit/e2e test).
-   Also export the reference file's bass after import and compare note counts.
-   Check: test passes; list any differences in the report.
-</details>
-
 ## Current Objective
-Round 3 is done (see above). Wait for Dan's Round 3 check before starting Round 4.
+### Round 4, "composition" (started 2026-11-16)
+Goal: write music from scratch, not just import it. Every new view edits
+the same model as the score and tabs; an edit in one shows up in all of
+them. Everything is undoable and survives save/reopen.
+
+1. **Piano roll.** Per-track view: draw, move, resize and delete notes;
+   snap grid (1/4 to 1/32, triplets); velocity lane; zoom; plays with the
+   cursor. Guitar/bass notes drawn here get playable string/fret positions.
+   Check: notes drawn in the piano roll appear identically in score and tab
+   (unit test + screenshot of both).
+2. **Chord explorer.** Pick a root, quality and extensions (or click a
+   chord symbol in the score). Show every practical guitar voicing (open,
+   barre/CAGED shapes up the neck, power chords, triads on string sets) as
+   chord diagrams with fingering, bass shapes, and piano inversions/voicings
+   (close, open, drop 2). Click to hear one; Insert puts it at the selected
+   beat of the selected track and can set the chord symbol. Respects the
+   track's tuning and capo. Check: C, Am7, D/F# and E7#9 in standard and
+   Drop D; unit test that every voicing's notes match the chord; screenshot.
+3. **Chord progression helper.** For the song's key: suggested next
+   chords, substitutions (relative minor/major, secondary dominants,
+   tritone sub, borrowed chords), and a library of common progressions
+   (I-V-vi-IV, ii-V-I, 12-bar blues, 50s, Andalusian, etc.) that insert as
+   chord symbols over selected bars, transposed to the key. Check: unit
+   tests for suggestions in C major and A minor; a 12-bar blues in E
+   inserted correctly.
+4. **Drum step sequencer.** Grid per bar for a drum track (16 or 32 steps,
+   triplet grid option), lanes for kick, snare, side-stick, closed/open/
+   pedal hi-hat, toms, crash, ride, ride bell, plus any other kit piece on
+   demand; velocity/accent per step; copy a bar, fill a section; a pattern
+   library to save and reuse patterns. Works on generated drum tracks too
+   (marks them edited). Check: a pattern built in the grid matches the drum
+   notation (unit test); screenshot.
+5. **Chord chart songs + song-wide changes.** New > Chord chart: type
+   chords per bar ("| C | Am | F G | %"), set sections and repeats, pick a
+   style, and the band panel generates from it. Also key changes,
+   time-signature changes and tempo changes (including gradual
+   accelerando/ritardando) at any bar, respected by playback, the band
+   engine and Rocksmith export. Check: a chart with a key change and a 3/4
+   bar generates and plays (muted); tempo map unit tests.
+6. **Harmony lines.** On a melody track: Add harmony above or below
+   (3rds, 6ths, or octaves), staying in key and following the chord
+   symbols, as a new track. Check: unit test on Ode to Joy that every
+   harmony note is in key and a 3rd/6th from the melody where expected.
+7. **MIDI keyboard.** Web MIDI input with device picker: playing a key
+   sounds the selected track's instrument; step entry (play a note to enter
+   it at the cursor); live recording with count-in, metronome and quantise
+   (none / 1/8 / 1/16 / triplets) into the selected track. No real keyboard
+   in tests: use a simulated MIDI input. Check: simulated input records the
+   expected notes at the expected times (unit test).
+8. **Save/load, undo and regression.** Everything above survives
+   save/reopen (deep-equal) and undoes in one step per action; the Round
+   1-3 app checks still pass on the new exe.
 
 ## Next Steps (Do Not Start Yet)
-- **Round 4: composition.** Piano roll, chord
-  explorer (every way to play a chord, hear it, insert it), drum step
-  sequencer.
 - **Round 5: production.** Effects (reverb, delay, distortion, EQ,
   compression), recorded audio tracks, export WAV/MP3/MIDI/MusicXML/PDF.
-- **Later, unordered:** MIDI keyboard recording (could move earlier), better
+- **Later, unordered:** better
   sound libraries / VST3 instruments, singing, "describe it" assisted
   composition, PDF score reading (Audiveris), audio to notes (basic-pitch),
   stem splitting (Demucs). Plug these in from existing tools, don't build them.
