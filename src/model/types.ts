@@ -1,6 +1,8 @@
 // musicGenie music model: the single source of truth.
 // Pure data, no Electron/DOM imports. Everything here must survive JSON.stringify/parse unchanged.
 
+import type { AudioClip, AutoLane, Effect, SongMix } from './mix';
+
 /** Ticks per quarter note used everywhere in the model. */
 export const PPQ = 960;
 
@@ -28,6 +30,8 @@ export interface Song {
   rocksmith?: RocksmithExport;
   /** Schema v4: the chord chart this song was made from (New > Chord chart). */
   chart?: { text: string };
+  /** Schema v5: master bus, Reverb and Delay send buses. Missing = defaults (limiter on master). */
+  mix?: SongMix;
 }
 
 export interface BackingTrack {
@@ -175,6 +179,10 @@ export interface Track {
   derived?: { from: string; part: SplitPart };
   /** Set on tracks imported from Rocksmith (schema v3+). */
   rocksmith?: { arrangement: RsArrangementType; tone?: string; centOffset?: number };
+  /** Schema v5: an audio track (recorded or imported clips). Its staff stays empty (rests). */
+  audio?: { clips: AudioClip[]; monitor?: boolean };
+  /** Schema v5: parameters that change over time. */
+  automation?: AutoLane[];
 }
 
 export type SplitPart = 'melody' | 'harmony' | 'bass';
@@ -186,6 +194,10 @@ export interface Mixer {
   pan: number;
   mute: boolean;
   solo: boolean;
+  /** Schema v5: effects chain (in order). */
+  fx?: Effect[];
+  /** Schema v5: send levels (0..1) to the shared Reverb and Delay buses. */
+  sends?: { reverb: number; delay: number };
 }
 
 export interface TrackDisplay {

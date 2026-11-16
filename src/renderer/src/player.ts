@@ -4,6 +4,8 @@ import * as alphaTab from '@coderline/alphatab';
 import type { Song } from '../../model/types';
 import { applySwing } from '../../render/swing';
 import { toAlphaTabScore } from '../../render/toAlphaTab';
+import { engine } from './audio/engine';
+import { ClipPlayer } from './audio/clips';
 
 export const DEFAULT_SOUNDFONT = 'GeneralUser GS 2.0.3';
 
@@ -39,8 +41,12 @@ export interface BeatHit {
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
+/** Everything that needs a re-render (mixer, effects, automation and audio clips do not). */
 function stripMixer(song: Song): string {
-  return JSON.stringify({ ...song, tracks: song.tracks.map((t) => ({ ...t, mixer: null })) });
+  return JSON.stringify({
+    ...song, mix: null,
+    tracks: song.tracks.map((t) => ({ ...t, mixer: null, automation: null, audio: t.audio ? 1 : null })),
+  });
 }
 
 export class ScorePlayer {
@@ -49,7 +55,7 @@ export class ScorePlayer {
   private lastStructure = '';
   private lastSong: Song | null = null;
   private lastLoadId = -1;
-  private renderedVolumes: number[] = [];
+  readonly clips = new ClipPlayer(engine);
   private resumeAfterLoad: { tick: number; play: boolean } | null = null;
   status: PlayerStatus = {
     ready: false, playing: false, currentBar: 0, tick: 0, songTick: 0, endTick: 0, looping: false, range: null, renderCount: 0,
@@ -63,6 +69,7 @@ export class ScorePlayer {
   onBeatClick: ((hit: BeatHit) => void) | null = null;
   private lastDown = { x: 0, y: 0 };
   private pendingScore: alphaTab.model.Score | null = null;
+  private soundFontRequested = false;
 
   private flushRenderWaiters() {
     const w = this.renderWaiters;
@@ -77,7 +84,8 @@ export class ScorePlayer {
     s.core.enableLazyLoading = false;
     s.core.useWorkers = false; // render on the page thread: simpler, errors surface, scores are small
     s.core.logLevel = alphaTab.LogLevel.Warning;
-    s.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
+    // The player is created below through our own factory (Round 5 engine: per-track outputs).
+    s.player.playerMode = alphaTab.PlayerMode.Disabled;
     this.defaultSoundFontUrl = base + 'sounds/GeneralUser-GS.sf2';
     s.player.soundFont = this.defaultSoundFontUrl;
     s.player.scrollElement = scrollEl;
@@ -90,10 +98,25 @@ export class ScorePlayer {
     this.api = new alphaTab.AlphaTabApi(host, s);
 
     const a = this.api;
+    const facade = a.uiFacade as unknown as { createWorkerPlayer: () => unknown };
+    facade.createWorkerPlayer = () => {
+      const synth = engine.createSynth();
+      synth.ready.on(() => {
+        if (!this.soundFontRequested) a.loadSoundFontFromUrl(this.defaultSoundFontUrl, false);
+      });
+      return synth;
+    };
+    s.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
+    a.updateSettings();
+    engine.modelTick = (t) => this.modelTick(t);
+    this.clips.occurrences = (bar) => this.occurrences(bar);
     a.playerReady.on(() => this.update({ ready: true }));
     a.soundFontLoaded.on(() => this.update({ soundFontLoads: this.status.soundFontLoads + 1 }));
     // Swing is a playback feel: shift off-beat 8ths in the generated MIDI, never in the score.
-    a.midiLoad.on((file) => applySwing(file as unknown as Parameters<typeof applySwing>[0], this.swing));
+    a.midiLoad.on((file) => {
+      applySwing(file as unknown as Parameters<typeof applySwing>[0], this.swing);
+      this.filterAudioTracks(file);
+    });
     a.playerStateChanged.on((e) => this.update({ playing: e.state === alphaTab.synth.PlayerState.Playing }));
     a.playerPositionChanged.on((e) => this.update({ tick: e.currentTick, songTick: this.modelTick(e.currentTick), endTick: e.endTick }));
     a.playedBeatChanged.on((beat) => this.update({ currentBar: beat.voice.bar.index }));
@@ -110,8 +133,7 @@ export class ScorePlayer {
       }, 50);
     });
     a.midiLoaded.on(() => {
-      // alphaTab ignores playbackInfo.isMute/isSolo when it builds playback: apply them to the synth.
-      this.applyMuteSolo();
+      // Mute/solo/volume/pan live in the mixer graph (engine), not in alphaTab's synth.
       const r = this.resumeAfterLoad;
       this.resumeAfterLoad = null;
       if (r) {
@@ -174,7 +196,8 @@ export class ScorePlayer {
     const newFile = loadId !== this.lastLoadId;
     this.lastLoadId = loadId;
     if (!newFile && this.lastSong && structure === this.lastStructure && this.api.score) {
-      this.applyMixer(song);
+      engine.setSong(song, null);
+      this.clips.setSong(song);
       this.lastSong = song;
       // Nothing to redraw: the view is up to date once any render in flight is drawn.
       if (!this.pendingScore) this.flushRenderWaiters();
@@ -189,7 +212,8 @@ export class ScorePlayer {
     this.update({ swing: this.swing });
     const score = toAlphaTabScore(song, this.api.settings);
     const visible = song.tracks.map((t, i) => (t.display.visible ? i : -1)).filter((i) => i >= 0);
-    this.renderedVolumes = song.tracks.map((t) => t.mixer.volume);
+    engine.setSong(song, score.tracks.map((t) => [t.playbackInfo.primaryChannel, t.playbackInfo.secondaryChannel]));
+    this.clips.setSong(song);
     if (!first) {
       if (wasPlaying) this.api.pause();
       this.resumeAfterLoad = { tick, play: wasPlaying };
@@ -200,42 +224,21 @@ export class ScorePlayer {
     this.api.renderScore(score, visible.length ? visible : [0]);
   }
 
-  private applyMuteSolo() {
-    const score = this.api.score;
+  /** Audio tracks have no notes to play: drop their (program change) MIDI events. */
+  filterAudioTracks(file: unknown) {
     const song = this.lastSong;
-    if (!score || !song) return;
-    const muted = score.tracks.filter((_, i) => song.tracks[i]?.mixer.mute);
-    const solo = score.tracks.filter((_, i) => song.tracks[i]?.mixer.solo);
-    this.api.changeTrackMute(score.tracks.filter((_, i) => !song.tracks[i]?.mixer.mute), false);
-    this.api.changeTrackSolo(score.tracks.filter((_, i) => !song.tracks[i]?.mixer.solo), false);
-    if (muted.length) this.api.changeTrackMute(muted, true);
-    if (solo.length) this.api.changeTrackSolo(solo, true);
+    const idx = new Set(song?.tracks.map((t, i) => (t.audio ? i : -1)).filter((i) => i >= 0) ?? []);
+    if (!idx.size) return;
+    const f = file as { tracks: { events: { track: number }[] }[] };
+    for (const t of f.tracks) t.events = t.events.filter((e) => !idx.has(e.track));
   }
 
-  private applyMixer(song: Song) {
-    const a = this.api;
-    const score = a.score!;
-    let panChanged = false;
-    song.tracks.forEach((t, i) => {
-      const at = score.tracks[i];
-      if (!at) return;
-      const prev = this.lastSong!.tracks[i].mixer;
-      if (prev.mute !== t.mixer.mute) a.changeTrackMute([at], t.mixer.mute);
-      if (prev.solo !== t.mixer.solo) a.changeTrackSolo([at], t.mixer.solo);
-      if (prev.volume !== t.mixer.volume) {
-        const base = this.renderedVolumes[i] || 1;
-        a.changeTrackVolume([at], base > 0 ? t.mixer.volume / base : t.mixer.volume);
-      }
-      if (prev.pan !== t.mixer.pan) {
-        at.playbackInfo.balance = Math.round(8 + t.mixer.pan * 8);
-        panChanged = true;
-      }
-    });
-    if (panChanged) {
-      this.resumeAfterLoad = { tick: a.tickPosition, play: this.status.playing };
-      if (this.status.playing) a.pause();
-      a.loadMidiForScore();
-    }
+  /** Playback ticks where a model bar starts (one per pass through repeats). */
+  occurrences(bar: number): number[] {
+    const lookups = this.api.tickCache?.masterBars;
+    if (!lookups?.length) return [this.barStartTick(bar)];
+    const out = lookups.filter((l) => l.masterBar.index === bar).map((l) => l.start);
+    return out.length ? out : [this.barStartTick(bar)];
   }
 
   /** Load a SoundFont (bytes of a .sf2/.sf3), or the bundled default with null. */
@@ -243,6 +246,7 @@ export class ScorePlayer {
     const wasPlaying = this.status.playing;
     if (wasPlaying) this.api.pause();
     this.api.resetSoundFonts();
+    this.soundFontRequested = true;
     if (bytes) this.api.loadSoundFont(bytes, false);
     else this.api.loadSoundFont(this.defaultSoundFontUrl, false);
     this.update({ soundFont: name });

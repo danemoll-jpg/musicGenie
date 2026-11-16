@@ -27,8 +27,11 @@ function busFor(ctx: BaseAudioContext): Bus {
   return bus;
 }
 
+// Offline contexts (export rendering) never reach the speakers, so they are not routed.
+const live = (d: AudioDestinationNode) => !(d.context instanceof OfflineAudioContext);
+
 AudioNode.prototype.connect = function (this: AudioNode, dest: unknown, ...rest: unknown[]) {
-  if (dest instanceof AudioDestinationNode) {
+  if (dest instanceof AudioDestinationNode && live(dest)) {
     origConnect.call(this, busFor(dest.context).pre, ...rest);
     return dest;
   }
@@ -36,7 +39,7 @@ AudioNode.prototype.connect = function (this: AudioNode, dest: unknown, ...rest:
 } as typeof AudioNode.prototype.connect;
 
 AudioNode.prototype.disconnect = function (this: AudioNode, dest?: unknown, ...rest: unknown[]) {
-  if (dest instanceof AudioDestinationNode) {
+  if (dest instanceof AudioDestinationNode && live(dest)) {
     const bus = buses.find((b) => b.ctx === dest.context);
     if (bus) return origDisconnect.call(this, bus.pre, ...rest);
   }

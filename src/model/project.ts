@@ -4,8 +4,10 @@ import type { Song } from './types';
 // v2 (Round 2): song.playback, song.band, track.generated, track.derived, chordSymbols[].source.
 // v3 (Round 3): song.backing, song.rocksmith, track.rocksmith, techniques.tremolo/slideToFret.
 // v4 (Round 4): tempos[].ramp / rampTo (gradual tempo changes), song.chart (chord chart text).
+// v5 (Round 5): song.mix (master + Reverb/Delay buses), mixer.fx / mixer.sends, track.automation,
+//     track.audio (audio clips; media in <name>_media next to the project).
 // Older files load as-is (every addition is optional).
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export interface ProjectFile {
   schemaVersion: number;

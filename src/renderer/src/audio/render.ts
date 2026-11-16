@@ -1,58 +1,28 @@
-// Offline audio for export: alphaTab's audio exporter synthesises the song faster than real time
-// (no speakers involved), or a loaded recording is decoded and lined up. Output: 16-bit stereo WAV.
-import * as alphaTab from '@coderline/alphatab';
+// Offline audio for export: the song through the mixer (offline.ts), or a loaded recording
+// decoded and lined up. Output: 16-bit stereo WAV.
 import type { Song } from '../../../model/types';
 import type { ScorePlayer } from '../player';
+import { renderSong, SAMPLE_RATE } from './offline';
 
-export const SAMPLE_RATE = 44100;
+export { SAMPLE_RATE };
 
 export interface RenderedAudio {
   /** Interleaved stereo samples. */
   samples: Float32Array;
   sampleRate: number;
-  /** Song length as alphaTab's synthesizer timed it (ms). */
+  /** Song length as the synthesizer timed it (ms). */
   synthEndMs: number;
   renderMs: number;
 }
 
 /**
- * Synthesise the song. `exclude` = track ids left out (e.g. the parts being exported);
- * muted tracks are always left out, and with any track soloed only soloed tracks play.
+ * Synthesise the song through the mixer (effects, sends, master). `exclude` = track ids left out
+ * (e.g. the parts being exported); muted tracks are left out, and with any track soloed only soloed
+ * tracks play.
  */
 export async function renderMix(player: ScorePlayer, song: Song, exclude: string[] = []): Promise<RenderedAudio> {
-  const t0 = performance.now();
-  const opts = new alphaTab.synth.AudioExportOptions();
-  opts.sampleRate = SAMPLE_RATE;
-  opts.masterVolume = 1;
-  opts.metronomeVolume = 0;
-  opts.useSyncPoints = false;
-  const anySolo = song.tracks.some((t) => t.mixer.solo);
-  song.tracks.forEach((t, i) => {
-    const on = !t.mixer.mute && (!anySolo || t.mixer.solo) && !exclude.includes(t.id);
-    opts.trackVolume.set(i, on ? 1 : 0);
-  });
-  const exporter = await player.api.exportAudio(opts);
-  const chunks: Float32Array[] = [];
-  let total = 0;
-  let endMs = 0;
-  try {
-    for (;;) {
-      const c = await exporter.render(1000);
-      if (!c) break;
-      chunks.push(c.samples);
-      total += c.samples.length;
-      endMs = c.endTime;
-    }
-  } finally {
-    (exporter as unknown as { [Symbol.dispose]?: () => void })[Symbol.dispose]?.();
-  }
-  const samples = new Float32Array(total);
-  let o = 0;
-  for (const c of chunks) {
-    samples.set(c, o);
-    o += c.length;
-  }
-  return { samples, sampleRate: SAMPLE_RATE, synthEndMs: endMs, renderMs: Math.round(performance.now() - t0) };
+  const r = await renderSong(player, song, { exclude });
+  return { samples: r.samples, sampleRate: r.sampleRate, synthEndMs: r.synthEndMs, renderMs: r.renderMs };
 }
 
 /** Decode a recording (WAV/MP3/OGG/FLAC) to interleaved stereo at SAMPLE_RATE. */

@@ -53,11 +53,17 @@ export function toAlphaTabScore(song: Song, settings: alphaTab.Settings, opts: R
   });
 
   const chordTrack = opts.chordTrackIndex ?? Math.max(0, song.tracks.findIndex((t) => t.display.visible));
+  // Every track gets its own MIDI channel(s): the playback engine splits the synthesizer's output
+  // per channel, so each track is its own audio stream (mixer strip + effects). Two channels per
+  // track while they fit (alphaTab plays bends on the second), one each above 7 melodic tracks.
+  // Drum tracks share channel 9; audio tracks get 15 and their MIDI events are dropped.
   let channel = 0;
   const nextChannel = () => {
     if (channel === 9) channel++;
     return Math.min(15, channel++);
   };
+  const melodic = song.tracks.filter((t) => !t.instrument.percussion && !t.audio).length;
+  const twoEach = melodic <= 7;
 
   song.tracks.forEach((t, ti) => {
     const track = new m.Track();
@@ -65,17 +71,19 @@ export function toAlphaTabScore(song: Song, settings: alphaTab.Settings, opts: R
     track.shortName = t.name.slice(0, 10);
     const pb = track.playbackInfo;
     pb.program = t.instrument.program;
-    if (t.instrument.percussion) {
+    if (t.audio) {
+      pb.primaryChannel = 15;
+      pb.secondaryChannel = 15;
+    } else if (t.instrument.percussion) {
       pb.primaryChannel = 9;
       pb.secondaryChannel = 9;
     } else {
       pb.primaryChannel = nextChannel();
-      pb.secondaryChannel = nextChannel();
+      pb.secondaryChannel = twoEach ? nextChannel() : pb.primaryChannel;
     }
-    pb.volume = Math.round(t.mixer.volume * 16);
-    pb.balance = Math.round(8 + t.mixer.pan * 8);
-    pb.isMute = t.mixer.mute;
-    pb.isSolo = t.mixer.solo;
+    // Track volume is the mixer fader (Web Audio gain after the synth); 13/16 = the old 0.8 default.
+    pb.volume = 13;
+    pb.balance = 8; // pan is the mixer's (Web Audio), after the synth
     score.addTrack(track);
     buildStaves(track, t, song, ti === chordTrack);
   });

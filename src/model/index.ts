@@ -23,3 +23,5 @@ export * from './songChanges';
 export * from './chart';
 export * from './harmony';
 export * from './recording';
+export * from './mix';
+export * from './loudness';
