@@ -10,6 +10,8 @@ import {
   type HarmonyInterval, type HarmonyDirection, type DrumPattern,
   type BackingTrack, type BandRole, type BandSettings, type Clip, type Cursor, type DisplayMode, type Mixer,
   type RocksmithExport, type RsImportReport, type RsReadResult, type Song, type StyleId,
+  FX_DEFS, newEffect, presetEffects, songMix, absolutizeMedia, mediaDirFor, mediaFiles, relativizeMedia,
+  type AutoLane, type Effect, type FxPreset, type FxType, type SongMix, type Track,
 } from '../../model';
 import type { RsExportResult } from './rocksmithExport';
 
@@ -104,9 +106,15 @@ export interface AppState {
   changesBar: number | null;
   /** Saved drum patterns (userData/settings.json). */
   drumPatterns: DrumPattern[];
+  /** Round 5: user effect presets (userData/settings.json). */
+  fxPresets: FxPreset[];
+  /** Export dialog open. */
+  exportOpen: boolean;
+  /** Keyboard piano (computer keys play notes) on. */
+  kbdPiano: boolean;
 }
 
-export type DockTab = 'roll' | 'drums' | 'chords' | 'prog' | 'midi';
+export type DockTab = 'roll' | 'drums' | 'chords' | 'prog' | 'midi' | 'mixer' | 'auto' | 'audio';
 
 type Listener = (s: AppState) => void;
 
@@ -122,6 +130,7 @@ export class Store {
     editMode: false, cursor: null, hasClip: false, busy: null, rsImport: null,
     rsExport: { open: false, running: false, step: null, result: null, error: null }, tuningTrack: null,
     selTrack: 0, dock: null, explore: null, chart: { open: false, editing: false }, changesBar: null, drumPatterns: [],
+    fxPresets: [], exportOpen: false, kbdPiano: false,
   };
   private clip: Clip | null = null;
   /** Tests only: export into this folder instead of Documents\musicGenie\Rocksmith. */
@@ -167,8 +176,10 @@ export class Store {
 
   openBytes(name: string, path: string | null, bytes: Uint8Array) {
     try {
-      const song = importFile(name, bytes);
       const isProject = name.toLowerCase().endsWith('.mgproj');
+      let song = importFile(name, bytes);
+      // Audio clips are saved relative to <name>_media next to the project.
+      if (isProject && path) song = absolutizeMedia(song, mediaDirFor(path));
       this.load(song, isProject ? path : null, name);
     } catch (e) {
       this.set({ error: (e as Error).message });
@@ -178,6 +189,17 @@ export class Store {
   async openPath(path: string) {
     const ext = path.toLowerCase().split('.').pop() ?? '';
     if (ext === 'psarc' || ext === 'rs2dlc') return this.openRocksmith(path);
+    if (ext === 'mgpack') {
+      try {
+        const project = await window.mg.unpack(path);
+        await this.openPath(project);
+        // Opened from a package: Save asks where to put it (the unpacked copy is temporary).
+        this.set({ filePath: null, fileName: path.split(/[\\/]/).pop() ?? path, dirty: false });
+      } catch (e) {
+        this.set({ error: 'Could not open the package: ' + (e as Error).message });
+      }
+      return;
+    }
     const f = await window.mg.readFile(path);
     if (ext === 'xml' && isRocksmithXml(f.bytes)) return this.openRocksmith(path);
     this.openBytes(f.name, f.path, f.bytes);
@@ -229,15 +251,61 @@ export class Store {
   async save(as = false) {
     const song = this.state.song;
     if (!song) return;
-    const path = await window.mg.saveProject(serializeProject(song), as ? null : this.state.filePath, song.title);
-    if (path) this.set({ filePath: path, fileName: path.split(/[\\/]/).pop() ?? path, dirty: false });
+    const path = (as ? null : this.state.filePath) ?? (await window.mg.savePath(song.title, 'mgproj', 'musicGenie project'));
+    if (path) await this.saveTo(path);
   }
 
-  edit(fn: (s: Song) => Song, label: string) {
+  /** Save to a path: audio clips are copied into <name>_media next to it and stored relative. */
+  async saveTo(path: string): Promise<string> {
+    const mediaDir = mediaDirFor(path);
+    const files = mediaFiles(this.state.song!);
+    const moved = new Map<string, string>();
+    for (const f of files) {
+      if (f.toLowerCase().startsWith(mediaDir.toLowerCase() + '\\')) continue;
+      try { moved.set(f, await window.mg.copyInto(f, mediaDir)); } catch (e) { this.set({ error: 'Could not copy ' + f + ': ' + (e as Error).message }); }
+    }
+    if (moved.size) {
+      this.edit((s) => ({
+        ...s,
+        tracks: s.tracks.map((t) => (t.audio ? { ...t, audio: { ...t.audio, clips: t.audio.clips.map((c) => ({ ...c, file: moved.get(c.file) ?? c.file })) } } : t)),
+      }), 'Copy audio into the project folder');
+    }
+    const json = serializeProject(relativizeMedia(this.state.song!, mediaDir));
+    const saved = await window.mg.saveProject(json, path, this.state.song!.title);
+    if (saved) this.set({ filePath: saved, fileName: saved.split(/[\\/]/).pop() ?? saved, dirty: false });
+    return saved ?? path;
+  }
+
+  /** One .mgpack file: the project and every audio file it uses. */
+  async savePackage(out?: string | null): Promise<string | null> {
+    const song = this.state.song;
+    if (!song) return null;
+    const path = out ?? (await window.mg.savePath(song.title, 'mgpack', 'musicGenie package (project + audio)'));
+    if (!path) return null;
+    const name = (path.split(/[\\/]/).pop() ?? 'song').replace(/\.[^.]+$/, '');
+    const media: { file: string; as: string }[] = [];
+    const used = new Set<string>();
+    for (const f of mediaFiles(song)) {
+      let as = f.split(/[\\/]/).pop() ?? 'audio';
+      for (let k = 2; used.has(as.toLowerCase()); k++) as = as.replace(/(-\d+)?(\.[^.]+)?$/, '-' + k + '$2');
+      used.add(as.toLowerCase());
+      media.push({ file: f, as });
+    }
+    const map = new Map(media.map((m) => [m.file, m.as]));
+    const rel: Song = {
+      ...song,
+      tracks: song.tracks.map((t) => (t.audio ? { ...t, audio: { ...t.audio, clips: t.audio.clips.map((c) => ({ ...c, file: map.get(c.file) ?? c.file })) } } : t)),
+    };
+    const r = await window.mg.pack({ out: path, name, json: serializeProject(rel), media });
+    this.set({ info: 'Package saved: ' + path + ' (' + media.length + ' audio file' + (media.length === 1 ? '' : 's') + ').' });
+    return r.path;
+  }
+
+  edit(fn: (s: Song) => Song, label: string, mergeKey?: string) {
     if (!this.history) return;
     const next = fn(this.history.present);
     if (next === this.history.present) return;
-    this.history.apply(next, label);
+    this.history.apply(next, label, mergeKey);
     this.autosaveDirty = true;
     this.set({ song: next, dirty: true });
   }
@@ -392,8 +460,105 @@ export class Store {
   setInstrument(trackId: string, instrumentId: string) {
     this.edit((s) => setInstrument(s, trackId, instrumentId), 'Change instrument');
   }
-  setMixer(trackId: string, patch: Partial<Mixer>) {
-    this.edit((s) => setMixer(s, trackId, patch), 'Track settings');
+  setMixer(trackId: string, patch: Partial<Mixer>, mergeKey?: string) {
+    const what = 'volume' in patch ? 'Volume' : 'pan' in patch ? 'Pan' : 'mute' in patch ? 'Mute' : 'solo' in patch ? 'Solo' : 'Track settings';
+    const merge = mergeKey ?? ('volume' in patch || 'pan' in patch ? Object.keys(patch)[0] + ':' + trackId : undefined);
+    this.edit((s) => setMixer(s, trackId, patch), what, merge);
+  }
+
+  // ----- Round 5: mixer, effects, automation -----
+  /** Effects of a track, or of '__master' / '__reverb' / '__delay'. */
+  fxOf(s: Song, target: string): Effect[] {
+    const mix = songMix(s);
+    if (target === '__master') return mix.master.fx;
+    if (target === '__reverb') return [mix.reverb.fx];
+    if (target === '__delay') return [mix.delay.fx];
+    return s.tracks.find((t) => t.id === target)?.mixer.fx ?? [];
+  }
+  private withFx(s: Song, target: string, fx: Effect[]): Song {
+    const mix = songMix(s);
+    if (target === '__master') return { ...s, mix: { ...mix, master: { ...mix.master, fx } } };
+    if (target === '__reverb') return { ...s, mix: { ...mix, reverb: { ...mix.reverb, fx: fx[0] } } };
+    if (target === '__delay') return { ...s, mix: { ...mix, delay: { ...mix.delay, fx: fx[0] } } };
+    return { ...s, tracks: s.tracks.map((t) => (t.id === target ? { ...t, mixer: { ...t.mixer, fx } } : t)) };
+  }
+  setFx(target: string, fn: (fx: Effect[]) => Effect[], label: string, mergeKey?: string) {
+    this.edit((s) => this.withFx(s, target, fn(this.fxOf(s, target))), label, mergeKey);
+  }
+  addFx(target: string, type: FxType) {
+    this.setFx(target, (fx) => [...fx, newEffect(type)], 'Add ' + FX_DEFS[type].name);
+  }
+  removeFx(target: string, id: string) {
+    this.edit((s) => {
+      const n = this.withFx(s, target, this.fxOf(s, target).filter((f) => f.id !== id));
+      // Automation lanes of a removed effect go too.
+      return { ...n, tracks: n.tracks.map((t) => (t.id === target && t.automation ? { ...t, automation: t.automation.filter((l) => !l.param.startsWith('fx:' + id + ':')) } : t)) };
+    }, 'Remove effect');
+  }
+  moveFx(target: string, id: string, dir: -1 | 1) {
+    this.setFx(target, (fx) => {
+      const i = fx.findIndex((f) => f.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= fx.length) return fx;
+      const n = [...fx];
+      [n[i], n[j]] = [n[j], n[i]];
+      return n;
+    }, 'Move effect');
+  }
+  bypassFx(target: string, id: string, bypass: boolean) {
+    this.setFx(target, (fx) => fx.map((f) => (f.id === id ? { ...f, bypass } : f)), bypass ? 'Bypass effect' : 'Enable effect');
+  }
+  setFxParam(target: string, id: string, key: string, value: number) {
+    this.setFx(target, (fx) => fx.map((f) => (f.id === id ? { ...f, params: { ...f.params, [key]: value } } : f)), 'Effect setting', 'fx:' + target + ':' + id + ':' + key);
+  }
+  applyPreset(trackId: string, p: FxPreset) {
+    this.edit((s) => ({
+      ...s,
+      tracks: s.tracks.map((t) => (t.id === trackId ? {
+        ...t,
+        mixer: { ...t.mixer, fx: presetEffects(p), sends: { reverb: p.sends?.reverb ?? 0, delay: p.sends?.delay ?? 0 } },
+        automation: t.automation?.filter((l) => !l.param.startsWith('fx:')),
+      } : t)),
+    }), 'Preset ' + p.name);
+  }
+  async loadFxPresets() {
+    const st = (await window.mg.settingsGet()) as { fxPresets?: FxPreset[] };
+    this.set({ fxPresets: st.fxPresets ?? [] });
+  }
+  async saveFxPreset(trackId: string, name: string) {
+    const t = this.state.song?.tracks.find((x) => x.id === trackId);
+    if (!t || !name.trim()) return;
+    const p: FxPreset = {
+      name: name.trim(), family: 'any',
+      fx: (t.mixer.fx ?? []).map((f) => ({ type: f.type, params: { ...f.params } })),
+      sends: { ...(t.mixer.sends ?? { reverb: 0, delay: 0 }) },
+    };
+    const list = [...this.state.fxPresets.filter((x) => x.name !== p.name), p];
+    await window.mg.settingsSet({ fxPresets: list });
+    this.set({ fxPresets: list, info: 'Preset "' + p.name + '" saved.' });
+  }
+  setSends(trackId: string, patch: Partial<{ reverb: number; delay: number }>) {
+    const key = Object.keys(patch)[0];
+    this.edit((s) => ({
+      ...s,
+      tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, mixer: { ...t.mixer, sends: { reverb: 0, delay: 0, ...t.mixer.sends, ...patch } } } : t)),
+    }), key === 'reverb' ? 'Reverb send' : 'Delay send', 'send:' + key + ':' + trackId);
+  }
+  setSongMix(fn: (m: SongMix) => SongMix, label: string, mergeKey?: string) {
+    this.edit((s) => ({ ...s, mix: fn(songMix(s)) }), label, mergeKey);
+  }
+  setAutomation(trackId: string, fn: (lanes: AutoLane[]) => AutoLane[], label: string, mergeKey?: string) {
+    this.edit((s) => ({ ...s, tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, automation: fn(t.automation ?? []) } : t)) }), label, mergeKey);
+  }
+  /** Replace a track (audio clips and other whole-track edits). */
+  updateTrack(trackId: string, fn: (t: Track) => Track, label: string, mergeKey?: string) {
+    this.edit((s) => ({ ...s, tracks: s.tracks.map((t) => (t.id === trackId ? fn(t) : t)) }), label, mergeKey);
+  }
+  openExport(open: boolean) {
+    this.set({ exportOpen: open });
+  }
+  setKbdPiano(on: boolean) {
+    this.set({ kbdPiano: on });
   }
   setDisplay(trackId: string, patch: { visible?: boolean; mode?: DisplayMode }) {
     this.edit((s) => setDisplay(s, trackId, patch), 'Track display');

@@ -8,9 +8,13 @@ import {
 import { ChordExplorer } from './ChordExplorer';
 import { DrumGrid } from './DrumGrid';
 import type { MidiController, MidiState } from './midi';
+import type { KeyboardPiano } from './kbdPiano';
 import { PianoRoll } from './PianoRoll';
 import type { PlayerStatus } from './player';
 import { Progressions } from './Progressions';
+import { MixerView } from './Mixer';
+import { AutomationPanel } from './Automation';
+import { AudioPanel } from './AudioTracks';
 import type { AppState, DockTab, Store } from './store';
 
 const TABS: { id: DockTab; label: string; title: string }[] = [
@@ -18,7 +22,10 @@ const TABS: { id: DockTab; label: string; title: string }[] = [
   { id: 'drums', label: '🥁 Drum grid', title: 'Step sequencer for a drum track' },
   { id: 'chords', label: '♯ Chords', title: 'Every way to play a chord; hear it, insert it' },
   { id: 'prog', label: '⇢ Progressions', title: 'What could come next, substitutions, common progressions' },
-  { id: 'midi', label: '🎛 MIDI', title: 'MIDI keyboard: play, step entry, record' },
+  { id: 'midi', label: '🎛 MIDI', title: 'MIDI keyboard (or the computer keyboard as a piano): play, step entry, record' },
+  { id: 'mixer', label: '🎚 Mixer', title: 'Faders, pan, meters, effects, sends, master' },
+  { id: 'auto', label: '〰 Automation', title: 'Volume, pan and effect settings that change over time' },
+  { id: 'audio', label: '🎙 Audio', title: 'Audio tracks: import, record, move, trim, split, fades' },
 ];
 
 export function Dock({ state, store, status, midi }: { state: AppState; store: Store; status: PlayerStatus | null; midi: MidiController }) {
@@ -26,7 +33,7 @@ export function Dock({ state, store, status, midi }: { state: AppState; store: S
   if (!song || !state.dock) return null;
   const ti = Math.min(state.selTrack, song.tracks.length - 1);
   return (
-    <div className="dock" data-testid="dock">
+    <div className={`dock ${state.dock === 'mixer' || state.dock === 'audio' ? 'tall' : ''}`} data-testid="dock">
       <div className="dock-tabs">
         {TABS.map((t) => (
           <button key={t.id} className={state.dock === t.id ? 'chip' : ''} title={t.title} onClick={() => store.openDock(t.id)} data-testid={'dock-' + t.id}>{t.label}</button>
@@ -43,6 +50,9 @@ export function Dock({ state, store, status, midi }: { state: AppState; store: S
         {state.dock === 'chords' && song.tracks.length > 0 && <ChordExplorer state={state} store={store} currentBar={status?.currentBar ?? 0} />}
         {state.dock === 'prog' && <Progressions state={state} store={store} status={status} />}
         {state.dock === 'midi' && <MidiPanel state={state} store={store} midi={midi} />}
+        {state.dock === 'mixer' && <MixerView state={state} store={store} />}
+        {state.dock === 'auto' && song.tracks.length > 0 && <AutomationPanel state={state} store={store} status={status} />}
+        {state.dock === 'audio' && <AudioPanel state={state} store={store} status={status} />}
       </div>
     </div>
   );
@@ -50,6 +60,20 @@ export function Dock({ state, store, status, midi }: { state: AppState; store: S
 
 function useMidi(midi: MidiController): MidiState {
   return useSyncExternalStore((f) => midi.on(f), () => midi.state);
+}
+
+export const kbdCtl: { current: KeyboardPiano | null } = { current: null };
+
+/** Keyboard piano on/off with its octave and velocity. */
+export function KbdPianoToggle({ state, store }: { state: AppState; store: Store }) {
+  const k = useSyncExternalStore((f) => kbdCtl.current?.on(f) ?? (() => {}), () => kbdCtl.current?.state ?? null);
+  return (
+    <label className={`toggle ${state.kbdPiano ? 'on kbd-on' : ''}`} data-testid="kbd-piano"
+      title="Play notes with the computer keyboard: A S D F G H J K L = white keys, W E T Y U O P = black keys, Z/X octave, C/V velocity. While on, those keys are the piano's.">
+      <input type="checkbox" checked={state.kbdPiano} onChange={(e) => { store.setKbdPiano(e.target.checked); if (!e.target.checked) kbdCtl.current?.allOff(); }} />
+      ⌨ Keyboard piano{state.kbdPiano && k ? ` (C${k.octave}, vel ${k.velocity})` : ''}
+    </label>
+  );
 }
 
 const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -67,6 +91,7 @@ export function MidiPanel({ state, store, midi }: { state: AppState; store: Stor
           {m.inputs.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
         </select>
         <button onClick={() => void midi.init()} title="Look for keyboards again">↻</button>
+        <KbdPianoToggle state={state} store={store} />
         <label className="check"><input type="checkbox" checked={m.monitor} onChange={(e) => midi.setOptions({ monitor: e.target.checked })} /> Play through “{t?.name}”</label>
         <label className="check" title="With ✎ Edit on: each key (or chord) is entered at the cursor, which then moves on">
           <input type="checkbox" checked={m.step} onChange={(e) => { midi.setOptions({ step: e.target.checked }); if (e.target.checked && !state.editMode) store.setEditMode(true); }} /> Step entry

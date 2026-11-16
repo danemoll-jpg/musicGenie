@@ -134,6 +134,7 @@ export class ScorePlayer {
     });
     a.midiLoaded.on(() => {
       // Mute/solo/volume/pan live in the mixer graph (engine), not in alphaTab's synth.
+      engine.reroute();
       const r = this.resumeAfterLoad;
       this.resumeAfterLoad = null;
       if (r) {
@@ -263,6 +264,11 @@ export class ScorePlayer {
       };
       tick();
     });
+  }
+
+  /** A render was requested and is not drawn yet. */
+  get renderPending(): boolean {
+    return !!this.pendingScore;
   }
 
   waitForRender(timeoutMs = 30000): Promise<void> {

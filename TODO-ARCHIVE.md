@@ -43,3 +43,56 @@ Dan's check list for Round 1 (done):
 - Known limits: MIDI import quantises to 16ths (no triplets yet) and holds only
   one voice per staff; the default sonivox SoundFont sounds basic; app has the
   default Electron icon; exe is unsigned (SmartScreen may warn).
+
+### Round 2, "virtual band v1" (2026-11-16): DONE, Dan moved on to Round 3 with no issues reported
+Checks ran in the packaged app (`npm run e2e:r2`), hidden (off-screen, never shown or
+focusable) and `--mute`; speaker level measured 0 on every playing step. Unit tests 84/84
+(`npm test`). Screenshots: `test-results/r2-*.png`; report `test-results/report-round2.json`.
+Sound: 2 checks, both unmuted only for the step: **item 1, 2.0 s** (Ode to Joy piano,
+GeneralUser GS) and **item 7, 4.0 s** (Rock band); speaker level back to 0 after each.
+1. Better sounds: **done.** GeneralUser GS 2.0.3 bundled (licence allows use in software,
+   `src/renderer/public/sounds/`). Settings > Load SoundFont (.sf2/.sf3), remembered in
+   app settings and in the project. Check: default plays (pre 0.12, speaker 0); sonivox.sf2
+   loaded as a user SoundFont, still chosen after a relaunch, "built-in" restores the default.
+2. Chord recognition: **done.** Per bar / half bar / beat, weighted by length, beat and bass;
+   maj, min, 7, maj7, m7, dim, dim7, m7b5, aug, sus2/4, power, slash. Detect keeps file chords
+   unless "Replace" is ticked; click a chord in the score for a picker. Check: Bach Prelude
+   35/35 bars (100%), Ode to Joy 15/16 (93.8%, bar 4 read as Em7/G then G); click C -> Am in app.
+3. Split a part: **done.** Track > Split: melody / harmony / bass tracks, source kept muted.
+   Check: Ode piano -> 3 parts (melody E E F G..., bass C3...); unit test: every note in
+   exactly one part, same times (also on every GP track).
+4. Sections: **done.** Drag over bars, pick a name, "Name bars x-y"; shown above the score,
+   chips in the Band panel. Check: Intro 1-4 / Verse 5-12 / Chorus 13-16 screenshot.
+5. Style engine: **done.** Rock, Blues (shuffle), Country, Jazz (swing), Pop; drums with
+   section-end fills + crash, bass (root/8ths, boogie, boom-chick, walking, follow kick),
+   rhythm (power chords, boogie, strum, shell comping, arpeggios), lead = melody moved to
+   the instrument's range; swing is a song playback setting; optional held ending.
+   Check: unit tests per style: in range, chord tones, playable frets, deterministic per seed.
+6. Band panel: **done.** Style, play-along track, lineup + instrument + Simple/Normal/Busy per
+   player, lead octave, bass follows kick, ending, Generate, Try another, Regenerate
+   (section and/or player), Feel slider. Check: Rock on Ode -> drums, bass, guitar, lead with
+   notation + tabs; hand-edited bass -> Regenerate asked first, Cancel kept it.
+7. Band playback: **done.** Check: all 5 styles, each generated track soloed sounds
+   (pre > 0), speaker 0, cursor moving, all band tracks muted -> silent. Found + fixed a
+   Round 1 bug: a track muted before a re-render still played (alphaTab ignores stored mute).
+8. Save/load + undo: **done** (project format v2; v1 files still open). Check: save ->
+   reopen deep-equal with tags, section seeds, chords, sections, swing, SoundFont; undo
+   after Generate + Regenerate restores the song exactly.
+
+Dan's check list for Round 2 (fill in what you find):
+- Run `dist\musicGenie-0.2.0-portable.exe` (or `npm run dev`). Sounds should be fuller
+  (GeneralUser GS). Settings (top right) > Load SoundFont to try another .sf2/.sf3.
+- Open `TestData\ode-to-joy-piano.musicxml`. The Band panel is on the right (toggle with
+  "Band"). Drag over bars 1-4 > pick Intro > "Name bars"; 5-12 Verse; 13-16 Chorus.
+- **Try each style:** pick Style > Generate > Play. Rock (power chords, 8th bass), Blues
+  (shuffle, boogie), Country (boom-chick, acoustic strum, fiddle lead), Jazz (swing ride,
+  walking bass, sax), Pop (kick-driven bass, keyboard arpeggios). Generate again with a new
+  style to replace the band; "Try another" for new choices; set a player to Busy or Simple.
+- Regenerate: choose a section (e.g. Chorus) and/or a player > Regenerate. Undo (Ctrl+Z)
+  takes back a whole Generate in one step.
+- Chords: "Detect chords" (tick "Replace file chords" to overwrite); click a chord name in
+  the score to change it. Try `TestData\bach-prelude-c-bwv846.mid` too.
+- Split: the Split button on the Piano track makes melody / harmony / bass tracks.
+- Known limits: the 0.1.0 exe was in use, so it is still in `dist\` (delete it when closed);
+  no note editing yet (Round 3/4); swing moves off-beat 8ths only; band parts never
+  cross barlines; lead = the top line of the play-along track.

@@ -14,6 +14,10 @@ export interface AppSettings {
   /** Round 4: saved drum patterns (DrumPattern[]) and the last MIDI input. */
   drumPatterns?: unknown[];
   midiInput?: string | null;
+  /** Round 5: user effect presets (FxPreset[]), audio input device, recording latency (ms). */
+  fxPresets?: unknown[];
+  audioInput?: string | null;
+  latencyMs?: number;
 }
 
 // Read synchronously so the renderer knows about --mute before any audio code runs.
@@ -46,6 +50,17 @@ const api = {
   pickFolder: (title: string): Promise<string | null> => ipcRenderer.invoke('pick-folder', title),
   paths: (): Promise<{ userData: string; documents: string; temp: string }> => ipcRenderer.invoke('paths'),
   reveal: (path: string): Promise<void> => ipcRenderer.invoke('reveal', path),
+  // ----- Round 5 -----
+  savePath: (suggestedName: string, ext: string, filterName: string): Promise<string | null> =>
+    ipcRenderer.invoke('save-path', { suggestedName, ext, filterName }),
+  copyInto: (src: string, dir: string): Promise<string> => ipcRenderer.invoke('copy-into', src, dir),
+  pack: (args: { out: string; name: string; json: string; media: { file: string; as: string }[] }): Promise<{ path: string; entries: number; bytes: number }> =>
+    ipcRenderer.invoke('pack', args),
+  unpack: (path: string): Promise<string> => ipcRenderer.invoke('unpack', path),
+  printPdf: (args: { out: string; job: Record<string, unknown> & { pageSize: 'Letter' | 'A4' }; pngOut?: string }): Promise<{ path: string; bytes: number; pages: number; png: string | null }> =>
+    ipcRenderer.invoke('print-pdf', args),
+  printJob: (): Promise<unknown> => ipcRenderer.invoke('print-job'),
+  printReady: (): void => ipcRenderer.send('print-ready'),
 };
 
 export type MgApi = typeof api;

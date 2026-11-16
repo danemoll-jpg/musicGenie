@@ -137,7 +137,7 @@ async function feed(ctx: BaseAudioContext, dest: AudioNode, player: ScorePlayer,
     for (const ch of [at.playbackInfo.primaryChannel, at.playbackInfo.secondaryChannel]) if (!owner.has(ch)) owner.set(ch, t.id);
   });
   for (const [ch, data] of sr.chans) {
-    if (ch === 16) continue; // metronome is never exported
+    // (The metronome is off in exports: its channel has no voices.)
     const src = ctx.createBufferSource();
     src.buffer = toBuffer(ctx, data, sr.frames);
     const id = owner.get(ch);

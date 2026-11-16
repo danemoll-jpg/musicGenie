@@ -45,6 +45,8 @@ const fxSig = (fx: Effect[]) => fx.map((f) => f.id + ':' + f.type + ':' + (f.byp
 class Chain {
   nodes: FxNode[] = [];
   sig = '';
+  /** Parameter values last applied per effect: only changes are sent (an IR swap is expensive). */
+  private applied = new Map<string, Record<string, number>>();
   constructor(private ctx: BaseAudioContext, private from: AudioNode, private to: AudioNode, private env: FxEnv) {
     from.connect(to);
   }
@@ -57,6 +59,7 @@ class Chain {
       try { this.from.disconnect(); } catch { /* none */ }
       this.nodes.forEach((n) => n.dispose());
       this.nodes = active.map((f) => buildEffect(this.ctx, f, this.env));
+      this.applied = new Map(active.map((f) => [f.id, { ...f.params }]));
       let prev: AudioNode = this.from;
       for (const n of this.nodes) { prev.connect(n.input); prev = n.output; }
       prev.connect(this.to);
@@ -65,7 +68,14 @@ class Chain {
     for (const f of active) {
       const n = this.nodes.find((x) => x.id === f.id);
       if (!n) continue;
-      for (const [k, v] of Object.entries(f.params)) if (!automated.has('fx:' + f.id + ':' + k)) n.set(k, v);
+      const last = this.applied.get(f.id) ?? {};
+      for (const [k, v] of Object.entries(f.params)) {
+        if (automated.has('fx:' + f.id + ':' + k)) { delete last[k]; continue; }
+        if (last[k] === v) continue;
+        n.set(k, v);
+        last[k] = v;
+      }
+      this.applied.set(f.id, last);
     }
   }
   node(id: string) {

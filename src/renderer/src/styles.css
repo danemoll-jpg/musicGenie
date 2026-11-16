@@ -199,3 +199,56 @@ select.harm { max-width: 110px; }
 .dock-tabs { overflow-x: auto; }
 .dock-tabs button { white-space: nowrap; padding: 3px 8px; }
 .dg-grid td { height: 15px; }
+
+/* Round 5: mixer, automation, audio tracks, export */
+.mixer { overflow: hidden; }
+.strips { display: flex; gap: 6px; padding: 6px; overflow-x: auto; overflow-y: hidden; height: 100%; align-items: stretch; }
+.strip > * { flex: none; }
+.dock.tall { height: 470px; }
+.strip { width: 168px; flex: none; display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: #fbfaf8; overflow-y: auto; font-size: 12px; }
+.strip.sel { border-color: var(--accent); }
+.strip.bus { background: #f3f6ff; }
+.strip.master { background: #fff6ec; }
+.sname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.snum { color: var(--muted); text-align: center; font-size: 11px; }
+.strip select, .strip input[type=text], .save-preset input { width: 100%; font-size: 11px; }
+.fx-chain { display: flex; flex-direction: column; gap: 3px; }
+.fx { border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+.fx.off { opacity: .55; }
+.fx-head { display: flex; align-items: center; gap: 2px; }
+.fx-head .nm { flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 3px; }
+.fx-head button { padding: 0 4px; font-size: 10px; border: none; background: none; }
+.fx-head button.pw.on { color: var(--solo); }
+.fx-params { display: flex; flex-direction: column; gap: 2px; padding: 3px 4px; }
+.fx-params label { display: grid; grid-template-columns: 52px 1fr 46px; align-items: center; gap: 3px; font-size: 10.5px; }
+.fx-params label select { grid-column: 2 / 4; }
+.fx-params input[type=range] { width: 100%; }
+.fx-params em { font-style: normal; color: var(--muted); text-align: right; white-space: nowrap; }
+.save-preset { display: flex; gap: 2px; }
+.save-preset button { padding: 1px 5px; font-size: 11px; }
+.sends label, .strip .pan { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 4px; }
+.sends input, .strip .pan input { width: 100%; }
+.ms-row { display: flex; gap: 4px; align-items: center; }
+.fader-row { display: flex; gap: 6px; align-items: stretch; height: 120px; flex: none; }
+.fader { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.fader input { writing-mode: vertical-lr; direction: rtl; height: 100px; width: 22px; }
+.meter { width: 22px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.meter .clip { height: 6px; border-radius: 2px; background: #ddd; }
+.meter .clip.on { background: #e03131; }
+.meter .bars { flex: 1; display: flex; gap: 2px; }
+.meter .bar { flex: 1; background: #222; border-radius: 2px; position: relative; overflow: hidden; }
+.meter .bar div { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, #2f9e44 0%, #2f9e44 70%, #fab005 85%, #e03131 100%); background-size: 100% 100px; background-position: bottom; }
+.auto-panel, .audio-panel { display: flex; flex-direction: column; min-height: 0; }
+.lanes { flex: 1; overflow: auto; position: relative; }
+.lane { border-bottom: 1px solid var(--line); position: relative; }
+.lane-head { display: flex; gap: 6px; align-items: center; padding: 2px 6px; background: #faf9f6; position: sticky; left: 0; }
+.lane svg, .clips svg { display: block; background: #fff; cursor: crosshair; }
+.clip-box { fill: #d0ebff; stroke: #1c7ed6; }
+.clip-box.sel { fill: #a5d8ff; stroke: #1864ab; stroke-width: 2; }
+.rec-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.in-meter { width: 120px; height: 10px; background: #222; border-radius: 3px; overflow: hidden; display: inline-block; }
+.in-meter div { height: 100%; background: #2f9e44; }
+.recording { color: #e03131; font-weight: 600; }
+.export-grid { display: grid; grid-template-columns: 140px 1fr; gap: 8px 10px; align-items: center; }
+.export-grid .full { grid-column: 1 / 3; }
+.kbd-on { background: #fff3bf !important; border-color: #f08c00 !important; }

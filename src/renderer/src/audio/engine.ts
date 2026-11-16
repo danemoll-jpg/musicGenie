@@ -14,8 +14,7 @@ import { laneValueAt, lanePoints, type Song, type Track } from '../../../model';
 import { MixGraph } from './graph';
 import { loadWorklets } from './worklet';
 
-export const OUTPUTS = 17; // MIDI channels 0..15 + the metronome channel (16)
-const METRONOME = 16;
+export const OUTPUTS = 17; // MIDI channels 0..15 + 16 (alphaTab's metronome = highest used channel + 1)
 const BUFFER_MS = 1000;
 /** Frames per synthesizer request (alphaTab: 32 micro buffers of 64 frames). */
 const CHUNK_FRAMES = 64 * 32;
@@ -187,7 +186,9 @@ export class Engine {
         });
         this.node = node;
         this.routedSig = '';
-        if (this.song) this.route(this.song, this.channelMap);
+        this.workletsReady = true;
+        // Effects use worklet processors too: build the mixer once they exist.
+        if (this.song) this.setSong(this.song, this.channelMap);
         return node;
       });
     }
@@ -206,11 +207,15 @@ export class Engine {
     return synth;
   }
 
+  /** While recording: player clock readings taken during main playback (not the count-in). */
+  anchorLog: PlayClock[] | null = null;
+
   notePlayed(frames: number, ctxTime: number) {
     this.playedFrames += frames;
     const s = this.synth;
     // The synth adds these frames to its time position right after this call.
     this.clock = { ctxTime: ctxTime + 128 / this.ctx.sampleRate, synthMs: (s?.timePosition ?? 0) + (frames / this.ctx.sampleRate) * 1000 };
+    if (this.anchorLog && this.playingMain) this.anchorLog.push({ ...this.clock });
   }
 
   /** Synth time (ms, playback timeline) heard at a context time. */
@@ -235,9 +240,15 @@ export class Engine {
   }
 
   /** Mixer state (and channel routing) from the song. */
+  private workletsReady = false;
+
   setSong(song: Song, channelMap: number[][] | null) {
     this.song = song;
     if (channelMap) this.channelMap = channelMap;
+    if (!this.workletsReady) {
+      void this.ensureNode();
+      return;
+    }
     this.bpmRef(song.tempos[0]?.bpm ?? 120);
     this.lanes = [];
     for (const t of song.tracks) for (const l of t.automation ?? []) if (l.points.length) this.lanes.push({ track: t, param: l.param, pts: lanePoints(song, l) });
@@ -246,6 +257,16 @@ export class Engine {
     this.applyAutomation(true);
     if (this.lanes.length && !this.autoTimer) this.autoTimer = setInterval(() => this.applyAutomation(false), 25);
     if (!this.lanes.length && this.autoTimer) { clearInterval(this.autoTimer); this.autoTimer = null; }
+  }
+
+  /** alphaTab plays the metronome / count-in on the channel after the highest one the song uses. */
+  get metronomeChannel(): number {
+    return (this.synth as unknown as { sequencer?: { metronomeChannel: number } } | null)?.sequencer?.metronomeChannel ?? 16;
+  }
+
+  /** Re-check routing (after a MIDI load the metronome channel may have moved). */
+  reroute() {
+    if (this.song) this.route(this.song, this.channelMap);
   }
 
   /** Connect worklet outputs (MIDI channels) to the tracks' strips. */
@@ -258,13 +279,14 @@ export class Engine {
       if (!t || t.audio) return;
       for (const ch of chs) if (!owner.has(ch)) owner.set(ch, t.id);
     });
-    const sig = [...owner].map(([c, id]) => c + '=' + id).join(',') + '|' + [...this.graph.strips.keys()].join(',');
+    const metro = this.metronomeChannel;
+    const sig = [...owner].map(([c, id]) => c + '=' + id).join(',') + '|' + [...this.graph.strips.keys()].join(',') + '|m' + metro;
     if (sig === this.routedSig) return;
     this.routedSig = sig;
     try { node.disconnect(); } catch { /* none */ }
     for (let ch = 0; ch < OUTPUTS; ch++) {
-      if (ch === METRONOME) { node.connect(this.graph.click, ch, 0); continue; }
       const id = owner.get(ch);
+      if (ch === metro && !id) { node.connect(this.graph.click, ch, 0); continue; }
       const strip = id ? this.graph.strip(id) : undefined;
       node.connect(strip ? strip.input : this.graph.masterIn, ch, 0);
     }

@@ -50,7 +50,8 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
 - Install: `npm install`, then `node node_modules/electron/install.js` (npm 11's
   allow-scripts skips Electron's binary download).
 - Dev run (visible window, for Dan): `npm run dev`
-- Unit tests (model, import counts, save/load, transpose, undo, chords, split, band styles): `npm test`
+- Unit tests (model, import counts, save/load, transpose, undo, chords, split, band styles,
+  mixer maths, loudness, export round trips): `npm test`
 - Typecheck: `npm run typecheck`
 - Build: `npm run build` (-> `out/`). Windows app: `npm run dist` ->
   `dist/win-unpacked/musicGenie.exe` + `dist/musicGenie-<ver>-portable.exe`.
@@ -75,6 +76,10 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   `test-results/report-round3.json`. No sound checks. Items 4, 5 and 8 use the private
   reference file `TestData/private/Husker-Du_...psarc` and skip without it; its unpacked
   copies and re-export are deleted at the end of the run.
+- Round 5 app checks: `npm run e2e:r5` (packaged) / `npm run e2e:r5:dev`; report
+  `test-results/report-round5.json`. No sound checks. Effects are checked offline on test
+  signals (`src/renderer/src/fxChecks.ts`); recording uses a simulated cable (output -> delay ->
+  input, `recorder.openSimulated`), so no real input device is needed.
 - Round 4 app checks: `npm run e2e:r4` (packaged) / `npm run e2e:r4:dev`; report
   `test-results/report-round4.json`. No sound checks (nothing unmutes). Item 7 drives the
   MIDI recorder with a simulated input (`mgTest.midiSimulate`); no keyboard needed.
@@ -104,7 +109,10 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   "use it in your software projects", may repackage). `public/soundfont/` and
   `public/font/` are gitignored (the alphaTab Vite plugin fills them). The user's
   SoundFont path is in `userData/settings.json` and in the project (`playback.soundFont`).
-- Project format v4 (`SCHEMA_VERSION = 4`; v4 adds `tempos[].ramp` / `tempos[].rampTo` for gradual
+- Project format v5 (`SCHEMA_VERSION = 5`; v5 adds `song.mix` (master fx/fader, Reverb + Delay
+  send buses), `mixer.fx` / `mixer.sends`, `track.automation` (lanes of bar/tick points) and
+  `track.audio.clips` (audio tracks; clip files saved RELATIVE to `<project>_media\`, absolute
+  in memory: `relativizeMedia` / `absolutizeMedia`). v4 adds `tempos[].ramp` / `tempos[].rampTo` for gradual
   tempo changes and `song.chart` = the chord chart text). Older: v2 = `song.playback` (swing, soundFont),
   `song.band` (panel setup), `track.generated` (style, role, complexity, seed,
   sectionSeeds, contentHash), `track.derived` (split parts), `chordSymbols[].source`;
@@ -147,14 +155,38 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   choice is saved as `rocksmithDlc` in `userData/settings.json`.
 - Backing track: an `<audio>` element follows the player position (seek on start/jumps,
   re-seek past 120 ms drift) through the master bus, so `--mute` covers it.
-- Audio export: alphaTab's `exportAudio` synthesises offline (~100x real time, never
-  through the speakers; it ignores swing and stored mute/solo, so `renderMix` sets track
-  volumes itself).
+- Offline audio (export, Rocksmith WAV, checks): `audio/offline.ts` runs the SAME synth
+  (`synth.exportAudio` exporter, split per channel) into the SAME mixer graph in an
+  OfflineAudioContext (effects, sends, master, automation, clips), ~4-10x real time. The
+  master bus patch skips OfflineAudioContexts (they never reach the speakers).
 - Band engine (`src/model/band.ts`) is pure and seeded: same song + settings + seed = same
   notes. "Edited by hand" = staves hash differs from `generated.contentHash`.
 - Swing is applied at playback only, in `api.midiLoad` (`src/render/swing.ts`).
-- alphaTab ignores `playbackInfo.isMute/isSolo` when building playback, so
-  `ScorePlayer` re-applies mute/solo on every `midiLoaded`.
+- Playback engine (Round 5, `src/renderer/src/audio/engine.ts`): alphaTab's player factory
+  (`uiFacade.createWorkerPlayer`) is replaced so the AlphaSynth runs on the PAGE thread; its
+  TinySoundFont `_fillWorkingBuffer` is patched to render each MIDI channel into its own buffer
+  (`splitByChannel`); an AudioWorklet (`mg-synth`, 17 outputs) plays them and reports played
+  frames back (the cursor clock). Each track owns its channel(s) (`toAlphaTab`: 2 per track up
+  to 7 melodic tracks, then 1; drums share 9; audio tracks get 15 and their MIDI is dropped);
+  outputs feed `MixGraph` strips (`audio/graph.ts`). Volume/pan/mute/solo are Web Audio gains
+  (alphaTab's `pb.volume` fixed at 13, balance 8). alphaTab puts the metronome on "highest used
+  channel + 1" (`engine.metronomeChannel`), routed to `graph.click` (no effects). Buffer 1 s.
+- Fader law (`src/model/mix.ts`): position 0.8 = 0 dB, dB = 60*log10(pos/0.8); equal-power pan.
+- Effects (`audio/fx.ts`): Web Audio nodes plus our own worklet processors `mg-comp`
+  (Web Audio's DynamicsCompressor adds automatic makeup gain, so it is not used), `mg-limiter`
+  (5 ms look-ahead), `mg-gate`, `mg-recorder`. Only CHANGED parameters are applied on a sync
+  (re-setting a convolver IR on every edit is expensive). Reverb and cabinet impulse responses
+  are generated by our own code from a fixed seed (`reverbIR`, `cabinetIR`): no third-party
+  licence. MP3: `@breezystack/lamejs` 1.2.7 (LGPL-3.0), loaded as its own chunk (dynamic import).
+- Automation: live = a 25 ms timer sets params from the heard position (`modelTick`), so it
+  follows loops/repeats/seeks; offline = one ramp point per 50 ms rendered chunk.
+- Audio clips: live `ClipPlayer` starts a clip when the heard position passes its bar (every
+  pass), or mid-clip after a seek. Recording: `audioTracksCtl.ts` maps recorded context frames
+  to the song through the worklet clock (`engine.anchorLog`) minus the latency setting.
+- PDF: main opens a hidden, non-focusable, offscreen window (`?print=1` -> `PrintView`),
+  alphaTab page layout at the printable width, then `printToPDF` (page numbers in the footer).
+- `.mgpack` = stored ZIP (`src/main/zip.ts`) of `<name>.mgproj` + `<name>_media/`; opening one
+  unpacks to `userData/packages/` and leaves the file path empty (Save asks where).
 - Never use native dialogs for questions (they would show over a hidden test window):
   `store.ask()` shows an in-app one.
 
@@ -192,8 +224,8 @@ Short results: about 20 lines per round, one line per item plus its check.
 - Live notes (chord explorer, piano-roll keys, drum lanes, MIDI keyboard):
   `audio/liveSynth.ts` = a SECOND alphaTab `AlphaSynth` on the page thread with a dummy
   output; we call its internal `synthesizer` (TinySoundFont: channelNoteOn/Off, synthesize)
-  from a ScriptProcessor. alphaTab's own player is in a worker and `playNote` stops the song,
-  so this is the only way to play notes over the song. Goes through the master bus (--mute).
+  from a ScriptProcessor in the engine's AudioContext, into the selected track's strip (its
+  effects). `playNote` would stop the song, so this is how notes play over it. --mute covers it.
 - Playback ticks vs model ticks: alphaTab plays repeats unrolled. `ScorePlayer.barStartTick`
   uses `api.tickCache.getMasterBarStart`; `status.songTick` = position folded back onto the
   model (piano-roll playhead, MIDI recording clock).
@@ -204,7 +236,9 @@ Short results: about 20 lines per round, one line per item plus its check.
   (`src/model/songChanges.ts`). Time-signature changes refit bars (`fitVoice`) and regenerate
   the band in the same undo step if no band track was edited.
 - Drum patterns saved by the user live in `userData/settings.json` (`drumPatterns`), the
-  last MIDI input in `midiInput`.
+  last MIDI input in `midiInput`; Round 5 adds `fxPresets`, `audioInput`, `latencyMs`.
+- Keyboard piano (`kbdPiano.ts`): only while the toggle is on; capture-phase key listener that
+  feeds `MidiController.handle`, so hearing/step entry/recording work like a MIDI keyboard.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
@@ -212,14 +246,16 @@ Rounds 1-4 done: import, score/tab view, playback, mixer basics, undo,
 autosave; virtual band (5 styles); tab editing, techniques, tunings,
 Rocksmith .psarc import/export (in-game test still pending Dan); piano roll,
 chord explorer, progression helper, drum grid, chord charts, key/time/tempo
-changes, harmony, MIDI keyboard. Current round: Round 5, production (per-track
-playback engine, mixer, effects, automation, audio tracks, keyboard piano,
-export).
+changes, harmony, MIDI keyboard. Round 5 done: per-track playback engine, mixer,
+effects + presets, automation, audio tracks (import/record/edit, media folder, .mgpack),
+keyboard piano, export (WAV/MP3/stems/MIDI/MusicXML/GP/PDF). Next: Dan's checks (TODO.md).
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
-progressions, drums, songChanges, chart, harmony, recording),
+progressions, drums, songChanges, chart, harmony, recording, mix, loudness, audioClips),
+`src/export` (MIDI, MusicXML, Guitar Pro writers),
 `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
 `src/main` (Electron, settings.json, Rocksmith helper process), `src/preload`,
 `src/renderer` (React UI, Band panel, dialogs, Round3.tsx edit bar/tuning/export dialog,
-editor keys, player, backing + offline audio, store, test API), `helpers/rocksmith`
+editor keys, player, store, test API; `audio/` engine, graph, fx, worklet, offline, clips,
+recorder; Mixer/Automation/AudioTracks/Round5 export dialog, PrintView), `helpers/rocksmith`
 (.NET helper + library submodule), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).

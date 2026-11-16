@@ -32,9 +32,22 @@ export class History<T> {
     return this.future[this.future.length - 1]?.label;
   }
 
-  /** Record a new state. A state identical (===) to the present is ignored. */
-  apply(next: T, label: string): T {
+  private merge: { key: string; at: number } | null = null;
+
+  /**
+   * Record a new state. A state identical (===) to the present is ignored. Edits with the same
+   * `mergeKey` within `mergeMs` of each other (e.g. one fader drag) become ONE undo step.
+   */
+  apply(next: T, label: string, mergeKey?: string, now = Date.now(), mergeMs = 1500): T {
     if (next === this._present) return next;
+    if (mergeKey && this.merge && this.merge.key === mergeKey && now - this.merge.at < mergeMs && this.past.length) {
+      this._present = next;
+      this._presentLabel = label;
+      this.future = [];
+      this.merge.at = now;
+      return next;
+    }
+    this.merge = mergeKey ? { key: mergeKey, at: now } : null;
     this.past.push({ state: this._present, label: this._presentLabel });
     if (this.past.length > this.limit) this.past.shift();
     this._present = next;
@@ -44,6 +57,7 @@ export class History<T> {
   }
 
   undo(): T {
+    this.merge = null;
     const prev = this.past.pop();
     if (!prev) return this._present;
     this.future.push({ state: this._present, label: this._presentLabel });
@@ -53,6 +67,7 @@ export class History<T> {
   }
 
   redo(): T {
+    this.merge = null;
     const next = this.future.pop();
     if (!next) return this._present;
     this.past.push({ state: this._present, label: this._presentLabel });

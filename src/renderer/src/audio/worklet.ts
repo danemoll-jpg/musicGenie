@@ -88,8 +88,9 @@ class MgGate extends AudioWorkletProcessor {
       { name: 'release', defaultValue: 100, minValue: 1, maxValue: 5000, automationRate: 'k-rate' },
     ];
   }
-  constructor() { super(); this.env = 0; this.gain = 0; this.holdLeft = 0; }
+  constructor() { super(); this.env = 0; this.gain = 0; this.holdLeft = 0; this.port.onmessage = (e) => { if (e.data === 'stop') this.dead = true; }; }
   process(inputs, outputs, p) {
+    if (this.dead) return false;
     const inp = inputs[0], out = outputs[0];
     if (!inp.length) return true;
     const n = inp[0].length;
@@ -113,6 +114,113 @@ class MgGate extends AudioWorkletProcessor {
   }
 }
 registerProcessor('mg-gate', MgGate);
+
+// Feed-forward compressor (soft knee, attack/release on the gain reduction, makeup). Unlike the
+// built-in DynamicsCompressorNode it adds no automatic makeup gain: below the threshold = untouched.
+class MgComp extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [
+      { name: 'threshold', defaultValue: -18, minValue: -100, maxValue: 0, automationRate: 'k-rate' },
+      { name: 'ratio', defaultValue: 4, minValue: 1, maxValue: 100, automationRate: 'k-rate' },
+      { name: 'attack', defaultValue: 10, minValue: 0.01, maxValue: 1000, automationRate: 'k-rate' },
+      { name: 'release', defaultValue: 150, minValue: 1, maxValue: 5000, automationRate: 'k-rate' },
+      { name: 'knee', defaultValue: 6, minValue: 0, maxValue: 40, automationRate: 'k-rate' },
+      { name: 'makeup', defaultValue: 0, minValue: -24, maxValue: 48, automationRate: 'k-rate' },
+    ];
+  }
+  constructor() { super(); this.env = 0; this.port.onmessage = (e) => { if (e.data === 'stop') this.dead = true; }; }
+  process(inputs, outputs, p) {
+    if (this.dead) return false;
+    const inp = inputs[0], out = outputs[0];
+    if (!inp.length) return true;
+    const n = inp[0].length;
+    const T = p.threshold[0], R = p.ratio[0], K = p.knee[0];
+    const aA = Math.exp(-1 / Math.max(1, p.attack[0] * sampleRate / 1000));
+    const aR = Math.exp(-1 / Math.max(1, p.release[0] * sampleRate / 1000));
+    const mk = p.makeup[0];
+    for (let i = 0; i < n; i++) {
+      let x = 0;
+      for (let c = 0; c < inp.length; c++) x = Math.max(x, Math.abs(inp[c][i]));
+      const xd = 20 * Math.log10(x + 1e-12);
+      const d = xd - T;
+      let y;
+      if (2 * d < -K) y = xd;
+      else if (K > 0 && 2 * Math.abs(d) <= K) y = xd + ((1 / R - 1) * (d + K / 2) * (d + K / 2)) / (2 * K);
+      else y = T + d / R;
+      const gr = y - xd;
+      this.env = gr < this.env ? aA * this.env + (1 - aA) * gr : aR * this.env + (1 - aR) * gr;
+      const g = Math.pow(10, (this.env + mk) / 20);
+      for (let c = 0; c < out.length; c++) out[c][i] = (inp[c] ?? inp[0])[i] * g;
+    }
+    return true;
+  }
+}
+registerProcessor('mg-comp', MgComp);
+
+// Look-ahead peak limiter (5 ms): the gain is lowered smoothly before a peak arrives, so the output
+// never goes over the ceiling; recovers with the release time.
+class MgLimiter extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [
+      { name: 'ceiling', defaultValue: -1, minValue: -40, maxValue: 0, automationRate: 'k-rate' },
+      { name: 'gain', defaultValue: 0, minValue: -24, maxValue: 36, automationRate: 'k-rate' },
+      { name: 'release', defaultValue: 80, minValue: 1, maxValue: 5000, automationRate: 'k-rate' },
+    ];
+  }
+  constructor() {
+    super();
+    this.L = Math.max(1, Math.round(0.005 * sampleRate));
+    this.size = this.L + 1;
+    this.bufL = new Float32Array(this.size);
+    this.bufR = new Float32Array(this.size);
+    this.need = new Float32Array(this.size);
+    this.envRing = new Float32Array(this.L);
+    this.envRing.fill(1);
+    this.envSum = this.L;
+    this.pos = 0;
+    this.epos = 0;
+    this.g = 1;
+    this.dqI = new Float64Array(this.size * 2);
+    this.dqV = new Float32Array(this.size * 2);
+    this.h = 0; this.t = 0; this.count = 0;
+    this.port.onmessage = (e) => { if (e.data === 'stop') this.dead = true; };
+  }
+  process(inputs, outputs, p) {
+    if (this.dead) return false;
+    const inp = inputs[0], out = outputs[0];
+    const n = out[0].length;
+    const ceil = Math.pow(10, p.ceiling[0] / 20);
+    const ig = Math.pow(10, p.gain[0] / 20);
+    const rel = Math.exp(-1 / Math.max(1, p.release[0] * sampleRate / 1000));
+    const L = this.L, size = this.size, cap = this.dqI.length;
+    for (let i = 0; i < n; i++) {
+      const l = inp.length ? inp[0][i] * ig : 0;
+      const r = inp.length ? (inp[1] ?? inp[0])[i] * ig : 0;
+      const pk = Math.max(Math.abs(l), Math.abs(r));
+      const nd = pk > ceil ? ceil / pk : 1;
+      const k = this.count++;
+      // Sliding minimum of the needed gain over the last L+1 samples (monotonic deque).
+      while (this.t > this.h && this.dqV[(this.t - 1) % cap] >= nd) this.t--;
+      this.dqI[this.t % cap] = k; this.dqV[this.t % cap] = nd; this.t++;
+      while (this.dqI[this.h % cap] <= k - size) this.h++;
+      const smin = this.dqV[this.h % cap];
+      this.g = Math.min(smin, 1 - (1 - this.g) * rel);
+      // Moving average over L samples, applied to the sample that is L old.
+      this.envSum += this.g - this.envRing[this.epos];
+      this.envRing[this.epos] = this.g;
+      this.epos = (this.epos + 1) % L;
+      const wp = this.pos;
+      this.bufL[wp] = l; this.bufR[wp] = r; this.need[wp] = nd;
+      const rp = (wp + 1) % size;
+      const gain = Math.min(this.envSum / L, this.need[rp]);
+      out[0][i] = this.bufL[rp] * gain;
+      if (out[1]) out[1][i] = this.bufR[rp] * gain;
+      this.pos = rp;
+    }
+    return true;
+  }
+}
+registerProcessor('mg-limiter', MgLimiter);
 
 class MgRecorder extends AudioWorkletProcessor {
   constructor() {

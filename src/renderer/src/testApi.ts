@@ -11,9 +11,26 @@ import { getMasterGain, measureLevels, setMasterGain } from './audio/masterBus';
 import { renderMix, wavBytes, wavLengthMs } from './audio/render';
 import type { ScorePlayer } from './player';
 import { exportRocksmith } from './rocksmithExport';
+import { engine } from './audio/engine';
+import { loadMedia } from './audio/clips';
+import { recorder } from './audio/recorder';
+import { renderSong } from './audio/offline';
+import { decodeRecording } from './audio/render';
+import type { AudioTracks } from './audioTracksCtl';
+import type { KeyboardPiano } from './kbdPiano';
+import { runFxChecks } from './fxChecks';
+import { defaultExportSettings, exportSong, type ExportSettings } from './exportSong';
+import { importFile } from '../../import';
+import {
+  barStartTicks, clipStartMs, integratedLoudness, msAtTick, posToMs, songMix, splitClipAtMs, trimClipEnd, trimClipStart, updateClip,
+  type AutoLane, type FxType,
+} from '../../model';
 import type { Store } from './store';
 
-export function installTestApi(store: Store, getPlayer: () => ScorePlayer | null, getBacking: () => BackingPlayer | null = () => null, midi?: MidiController) {
+export function installTestApi(
+  store: Store, getPlayer: () => ScorePlayer | null, getBacking: () => BackingPlayer | null = () => null, midi?: MidiController,
+  audio?: AudioTracks, kbd?: KeyboardPiano,
+) {
   const frame = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   const setValue = (el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, v: string) => {
     const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -58,6 +75,11 @@ export function installTestApi(store: Store, getPlayer: () => ScorePlayer | null
     },
     async waitRender() {
       await player().waitForRender();
+    },
+    /** Wait for a re-render only if one is in flight (mixer-only edits never re-render). */
+    async settle() {
+      await new Promise((r) => setTimeout(r, 50));
+      if (player().renderPending) await player().waitForRender();
     },
     waitReady(timeoutMs = 30000) {
       return new Promise<boolean>((resolve) => {
@@ -273,6 +295,137 @@ export function installTestApi(store: Store, getPlayer: () => ScorePlayer | null
     midiSimulate: (msgs: { delay: number; data: number[] }[]) => midi?.simulate(msgs),
     midiReceived: () => midi?.received ?? 0,
     undoLabel: () => store.state.undoLabel,
+    // ----- Round 5 -----
+    /** Peak level per track strip, the buses and the master, sampled for `ms` (post-fader, post-mute). */
+    async trackMeters(ms: number) {
+      const peaks: Record<string, number> = {};
+      const t0 = performance.now();
+      while (performance.now() - t0 < ms) {
+        const m = engine.meters();
+        const put = (k: string, v: { peakL: number; peakR: number }) => { peaks[k] = Math.max(peaks[k] ?? 0, v.peakL, v.peakR); };
+        for (const [id, v] of Object.entries(m.tracks)) put(id, v);
+        put('__reverb', m.reverb); put('__delay', m.delay); put('__master', m.master);
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      return peaks;
+    },
+    engineInfo: () => ({
+      sampleRate: engine.ctx.sampleRate, state: engine.ctx.state, channelMap: engine.channelMap,
+      playedFrames: engine.playedFrames, synthesizedFrames: engine.synthesizedFrames, strips: [...engine.graph.strips.keys()],
+      clipsStarted: getPlayer()?.clips.started ?? 0,
+    }),
+    mix: () => ({ song: songMix(store.state.song!), tracks: store.state.song!.tracks.map((t) => ({ id: t.id, mixer: t.mixer, automation: t.automation ?? [] })) }),
+    addFx: (trackIndex: number | string, type: FxType) => store.addFx(typeof trackIndex === 'string' ? trackIndex : store.state.song!.tracks[trackIndex].id, type),
+    fxOf: (target: string | number) => store.fxOf(store.state.song!, typeof target === 'string' ? target : store.state.song!.tracks[target].id),
+    setFxParam: (target: string | number, id: string, key: string, v: number) => store.setFxParam(typeof target === 'string' ? target : store.state.song!.tracks[target].id, id, key, v),
+    moveFx: (ti: number, id: string, dir: -1 | 1) => store.moveFx(store.state.song!.tracks[ti].id, id, dir),
+    bypassFx: (ti: number, id: string, b: boolean) => store.bypassFx(store.state.song!.tracks[ti].id, id, b),
+    removeFx: (ti: number, id: string) => store.removeFx(store.state.song!.tracks[ti].id, id),
+    applyPreset: async (ti: number, name: string) => {
+      const { FX_PRESETS } = await import('../../model');
+      const p = [...FX_PRESETS, ...store.state.fxPresets].find((x) => x.name === name);
+      if (!p) throw new Error('no preset ' + name);
+      store.applyPreset(store.state.song!.tracks[ti].id, p);
+    },
+    saveFxPreset: (ti: number, name: string) => store.saveFxPreset(store.state.song!.tracks[ti].id, name),
+    fxPresets: () => store.state.fxPresets,
+    setSends: (ti: number, patch: { reverb?: number; delay?: number }) => store.setSends(store.state.song!.tracks[ti].id, patch),
+    setMasterVolume: (v: number) => store.setSongMix((m) => ({ ...m, master: { ...m.master, volume: v } }), 'Master volume', 'master'),
+    fxChecks: () => runFxChecks(),
+    setAutomation: (ti: number, lanes: AutoLane[]) => store.setAutomation(store.state.song!.tracks[ti].id, () => lanes, 'Automation'),
+    /** Offline render; per-bar RMS (dB) of the mix and optional stems. */
+    async renderBars(opts: { stems?: boolean } = {}) {
+      const song = store.state.song!;
+      const r = await renderSong(player(), song, { stems: opts.stems ? { tracks: true, buses: true } : null });
+      const starts = barStartTicks(song);
+      const pts = (await import('../../model')).tempoPoints(song);
+      const sr = r.sampleRate;
+      const barRms = starts.map((st, i) => {
+        const a = Math.round((msAtTick(pts, st) / 1000) * sr);
+        const b = Math.round((msAtTick(pts, starts[i + 1] ?? st + 3840) / 1000) * sr);
+        let e = 0;
+        for (let k = a; k < b && 2 * k + 1 < r.samples.length; k++) e += r.samples[2 * k] ** 2 + r.samples[2 * k + 1] ** 2;
+        return Math.round(10 * Math.log10(e / Math.max(1, 2 * (b - a)) + 1e-20) * 10) / 10;
+      });
+      let peak = 0;
+      for (let i = 0; i < r.samples.length; i += 3) peak = Math.max(peak, Math.abs(r.samples[i]));
+      return {
+        barRms, peak, renderMs: r.renderMs, lengthMs: (r.samples.length / 2 / sr) * 1000, synthEndMs: r.synthEndMs,
+        stems: r.stems.map((s) => ({ id: s.id, name: s.name, peak: s.samples.reduce((m, v) => Math.max(m, Math.abs(v)), 0) })),
+      };
+    },
+    // audio tracks
+    audioAddTrack: () => audio!.addTrack(),
+    audioImport: (path: string, bar: number) => audio!.importFile(path, null, bar),
+    audioClips: (ti: number) => store.state.song!.tracks[ti].audio?.clips ?? [],
+    clipStartMs: (ti: number, ci: number) => clipStartMs(store.state.song!, store.state.song!.tracks[ti].audio!.clips[ci]),
+    clipEdit(ti: number, ci: number, op: 'move' | 'trimStart' | 'trimEnd' | 'split' | 'fades', arg: number | { fadeInMs: number; fadeOutMs: number; gainDb: number }) {
+      const t = store.state.song!.tracks[ti];
+      const c = t.audio!.clips[ci];
+      if (op === 'move') store.edit((s) => updateClip(s, t.id, c.id, { bar: arg as number, tick: 0 }), 'Move clip');
+      if (op === 'trimStart') store.edit((s) => updateClip(s, t.id, c.id, trimClipStart(s, c, arg as number)), 'Trim clip');
+      if (op === 'trimEnd') store.edit((s) => updateClip(s, t.id, c.id, trimClipEnd(s, c, arg as number)), 'Trim clip');
+      if (op === 'split') store.edit((s) => splitClipAtMs(s, t.id, c.id, arg as number), 'Split clip');
+      if (op === 'fades') store.edit((s) => updateClip(s, t.id, c.id, arg as object), 'Clip fades');
+    },
+    posToMs: (bar: number, tick: number) => posToMs(store.state.song!, bar, tick),
+    recorderSimulated: (delayMs: number) => recorder.openSimulated(delayMs),
+    recorderState: () => recorder.state,
+    measureLatency: () => recorder.measureLatency(),
+    setLatency: (ms: number) => recorder.setLatency(ms),
+    recordStart: (opts: { startBar: number; countIn: boolean; metronome: boolean }) => audio!.startRecording(opts),
+    recordStop: () => audio!.stopRecording(),
+    /** Transients of a clip as song times (ms): where each click sounds in the song. */
+    async clipOnsets(ti: number, ci: number, threshold = 0.05) {
+      const song = store.state.song!;
+      const c = song.tracks[ti].audio!.clips[ci];
+      const buf = await loadMedia(engine.ctx, c.file);
+      const d = buf.getChannelData(0);
+      const sr = buf.sampleRate;
+      const start = Math.round((c.startMs / 1000) * sr);
+      const end = Math.min(d.length, start + Math.round((c.lengthMs / 1000) * sr));
+      const at = clipStartMs(song, c);
+      const out: number[] = [];
+      let last = -1e9;
+      for (let i = start; i < end; i++) {
+        if (Math.abs(d[i]) > threshold && i - last > sr * 0.1) {
+          out.push(at + ((i - start) / sr) * 1000);
+          last = i;
+        }
+      }
+      return out;
+    },
+    beatMs(bar: number, beat: number) {
+      const song = store.state.song!;
+      return posToMs(song, bar, beat * 960);
+    },
+    saveProjectTo: (path: string) => store.saveTo(path),
+    savePackage: (path: string) => store.savePackage(path),
+    openPath: (path: string) => store.openPath(path),
+    fileExists: (path: string) => window.mg.fileExists(path),
+    // keyboard piano
+    kbdPiano: (on: boolean) => store.setKbdPiano(on),
+    kbdState: () => kbd?.state,
+    keyDown(key: string) { window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); },
+    keyUp(key: string) { window.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, cancelable: true })); },
+    // export
+    async exportAll(dir: string, patch: Partial<ExportSettings> = {}) {
+      const song = store.state.song!;
+      const s = { ...defaultExportSettings(song, dir), ...patch };
+      return exportSong(player(), song, s);
+    },
+    async reimportCount(path: string) {
+      const f = await window.mg.readFile(path);
+      const song = importFile(f.name, f.bytes);
+      return { notes: countNoteOnsets(song), tracks: song.tracks.length, bars: song.bars.length };
+    },
+    async wavLoudness(path: string) {
+      const x = await decodeRecording(path);
+      let p = 0;
+      for (const v of x) p = Math.max(p, Math.abs(v));
+      return { lufs: integratedLoudness(x, 44100), peakDb: 20 * Math.log10(p || 1e-9), ms: (x.length / 2 / 44100) * 1000 };
+    },
+    openExportDialog: (open: boolean) => store.openExport(open),
     scrollScoreToBar(bar: number) {
       const p = player();
       const lookup = p.api.boundsLookup;

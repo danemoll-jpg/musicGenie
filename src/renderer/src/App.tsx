@@ -6,7 +6,8 @@ import { editorKey } from './editor';
 import { ChordPickerPopover, ConfirmDialog, SettingsMenu } from './Overlays';
 import { DEFAULT_SOUNDFONT, ScorePlayer, type PlayerStatus } from './player';
 import { BackingRow, CursorOverlay, EditBar, RocksmithDialog, TuningControls, TuningDialog } from './Round3';
-import { ChangesDialog, ChartDialog, Dock, HarmonyMenu } from './Round4';
+import { ChangesDialog, ChartDialog, Dock, HarmonyMenu, KbdPianoToggle } from './Round4';
+import { ExportDialog } from './Round5';
 import { liveSynth } from './audio/liveSynth';
 import type { MidiController } from './midi';
 import type { AppState, Store } from './store';
@@ -158,6 +159,8 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
           <button onClick={() => store.openDialog()} title="Open (Ctrl+O): MusicXML, Guitar Pro, MIDI, Rocksmith .psarc / .rs2dlc / .xml, .mgproj">Open…</button>
           <button onClick={() => store.save()} disabled={!song} title="Save (Ctrl+S)">Save</button>
           <button onClick={() => store.save(true)} disabled={!song}>Save As…</button>
+          <button onClick={() => void store.savePackage()} disabled={!song} title="One .mgpack file with the project and all its audio (for moving to another PC)">Package…</button>
+          <button onClick={() => store.openExport(true)} disabled={!song} data-testid="export-open" title="Mixdown WAV/MP3, stems, MIDI, MusicXML, Guitar Pro, PDF">⇩ Export…</button>
         </div>
         <div className="group">
           <button onClick={() => store.undo()} disabled={!state.canUndo} title={`Undo ${state.undoLabel ?? ''} (Ctrl+Z)`}>↶ Undo</button>
@@ -211,6 +214,9 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
           </div>
           <button className={state.dock ? 'chip' : ''} disabled={!song} data-testid="compose-toggle" title="Piano roll, drum grid, chord explorer, progressions, MIDI keyboard"
             onClick={() => store.openDock(state.dock ? null : 'roll')}>🎹 Compose</button>
+          <button className={state.dock === 'mixer' ? 'chip' : ''} disabled={!song} data-testid="mixer-toggle" title="Mixer: faders, meters, effects, sends, master"
+            onClick={() => store.openDock(state.dock === 'mixer' ? null : 'mixer')}>🎚 Mixer</button>
+          {song && <KbdPianoToggle state={state} store={store} />}
           <button disabled={!song} data-testid="rs-open" title="Export guitar/bass parts as a Rocksmith 2014 song" onClick={() => store.openRsExport(true)}>⇪ Rocksmith…</button>
         </div>
         <div className="group right">
@@ -223,6 +229,7 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
       <RocksmithDialog state={state} store={store} player={player} />
       <ChartDialog state={state} store={store} />
       <ChangesDialog state={state} store={store} />
+      <ExportDialog state={state} store={store} player={player} />
       <div className="main">
         <aside className="tracks">
           <div className="tracks-head">
@@ -262,6 +269,27 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
 
 function TrackRow({ track: t, store, index, selected }: { track: Track; store: Store; index: number; selected: boolean }) {
   const fretted = !!t.tuning;
+  if (t.audio) {
+    return (
+      <div className={`track ${selected ? 'selected' : ''}`} data-track={t.id} onMouseDown={() => store.setSelTrack(index)}>
+        <div className="row1">
+          <span className="name" title={t.name}>🎙 {t.name}</span>
+          <span className="tag" title="Audio track (clips in the 🎙 Audio tab)">audio · {t.audio.clips.length}</span>
+          <button className={`ms ${t.mixer.mute ? 'on mute' : ''}`} title="Mute" onClick={() => store.setMixer(t.id, { mute: !t.mixer.mute })}>M</button>
+          <button className={`ms ${t.mixer.solo ? 'on solo' : ''}`} title="Solo" onClick={() => store.setMixer(t.id, { solo: !t.mixer.solo })}>S</button>
+        </div>
+        <div className="row3">
+          <label title="Volume">Vol
+            <input type="range" min={0} max={1} step={0.01} value={t.mixer.volume} onChange={(e) => store.setMixer(t.id, { volume: Number(e.target.value) })} />
+          </label>
+          <label title="Pan">Pan
+            <input type="range" min={-1} max={1} step={0.05} value={t.mixer.pan} onChange={(e) => store.setMixer(t.id, { pan: Number(e.target.value) })} />
+          </label>
+          <button onClick={() => store.openDock('audio')} title="Clips, import, recording">Clips…</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={`track ${t.display.visible ? '' : 'hidden'} ${selected ? 'selected' : ''}`} data-track={t.id} onMouseDown={() => store.setSelTrack(index)}>
       <div className="row1">
@@ -296,7 +324,7 @@ function TrackRow({ track: t, store, index, selected }: { track: Track; store: S
       <TuningControls track={t} store={store} />
       <div className="row3">
         <label title="Volume">Vol
-          <input type="range" min={0} max={1} step={0.05} value={t.mixer.volume}
+          <input type="range" min={0} max={1} step={0.01} value={t.mixer.volume}
             onChange={(e) => store.setMixer(t.id, { volume: Number(e.target.value) })} />
         </label>
         <label title="Pan">Pan

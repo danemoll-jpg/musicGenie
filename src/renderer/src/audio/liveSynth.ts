@@ -4,6 +4,7 @@
 // directly, pulling samples through a ScriptProcessor. Its output goes to the speakers through
 // the master bus like everything else, so --mute silences it.
 import * as alphaTab from '@coderline/alphatab';
+import { engine } from './engine';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Tsf = {
@@ -58,11 +59,12 @@ export class LiveSynth {
       this.soundFontName = 'default';
     }
     if (!this.ctx) {
-      this.ctx = new AudioContext();
+      // Round 5: the engine's context, so live notes go through a track's strip (its effects).
+      this.ctx = engine.ctx;
       const node = this.ctx.createScriptProcessor(1024, 0, 2);
       node.onaudioprocess = (e) => this.render(e);
-      node.connect(this.ctx.destination);
       this.node = node;
+      this.reroute();
     }
     const output = {
       sampleRate: this.ctx.sampleRate,
@@ -102,9 +104,22 @@ export class LiveSynth {
     }
   }
 
+  /** Where live notes go: the strip of this track (resolved at each note), or the master. */
+  target: () => AudioNode | null = () => null;
+  private routed: AudioNode | null = null;
+  private reroute() {
+    if (!this.node || !this.ctx) return;
+    const dest = this.target() ?? engine.graph.masterIn;
+    if (dest === this.routed) return;
+    try { this.node.disconnect(); } catch { /* none */ }
+    this.node.connect(dest);
+    this.routed = dest;
+  }
+
   private async channelFor(program: number, percussion: boolean): Promise<{ tsf: Tsf; ch: number } | null> {
     const tsf = await this.ensure();
     if (!tsf) return null;
+    this.reroute();
     if (this.ctx?.state === 'suspended') await this.ctx.resume();
     if (!percussion && !this.programs.has(program)) {
       this.programs.add(program);

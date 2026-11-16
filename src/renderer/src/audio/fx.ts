@@ -238,16 +238,13 @@ export function buildEffect(ctx: BaseAudioContext, fx: Effect, env: FxEnv): FxNo
       break;
     }
     case 'comp': {
-      const c = mk(ctx.createDynamicsCompressor());
-      c.threshold.value = p.threshold; c.ratio.value = p.ratio; c.attack.value = p.attack / 1000;
-      c.release.value = p.release / 1000; c.knee.value = p.knee;
-      const mg = gain(dbToGain(p.makeup));
-      c.connect(mg);
-      input = c; output = mg;
-      Object.assign(params, {
-        threshold: param(c.threshold), ratio: param(c.ratio), attack: param(c.attack, (v) => v / 1000),
-        release: param(c.release, (v) => v / 1000), knee: param(c.knee), makeup: param(mg.gain, dbToGain),
-      });
+      const c = mk(new AudioWorkletNode(ctx, 'mg-comp', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] }));
+      for (const k of ['threshold', 'ratio', 'attack', 'release', 'knee', 'makeup']) {
+        const ap = c.parameters.get(k)!;
+        ap.value = p[k];
+        params[k] = param(ap);
+      }
+      input = c; output = c;
       break;
     }
     case 'gate': {
@@ -388,16 +385,19 @@ export function buildEffect(ctx: BaseAudioContext, fx: Effect, env: FxEnv): FxNo
       break;
     }
     case 'limiter': {
-      const inG = gain(dbToGain(p.gain));
-      const c = mk(ctx.createDynamicsCompressor());
-      c.threshold.value = p.ceiling - 3; c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = p.release / 1000;
+      const lim = mk(new AudioWorkletNode(ctx, 'mg-limiter', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] }));
+      for (const k of ['ceiling', 'gain', 'release']) {
+        const ap = lim.parameters.get(k)!;
+        ap.value = p[k];
+        params[k] = param(ap);
+      }
+      // Safety: a hard ceiling for anything the limiter lets through.
       const sh = mk(ctx.createWaveShaper());
       sh.curve = limiterCurve(p.ceiling);
-      inG.connect(c).connect(sh);
-      input = inG; output = sh;
-      params.gain = param(inG.gain, dbToGain);
-      params.release = param(c.release, (v) => v / 1000);
-      params.ceiling = (v, at) => { smooth(c.threshold, v - 3, at); sh.curve = limiterCurve(v); };
+      lim.connect(sh);
+      input = lim; output = sh;
+      const ceil = params.ceiling;
+      params.ceiling = (v, at, r) => { ceil(v, at, r); sh.curve = limiterCurve(v); };
       break;
     }
     default: {
@@ -421,6 +421,7 @@ export function buildEffect(ctx: BaseAudioContext, fx: Effect, env: FxEnv): FxNo
       for (const n of nodes) {
         try { n.disconnect(); } catch { /* already */ }
         if (n instanceof OscillatorNode) try { n.stop(); } catch { /* already */ }
+        if (n instanceof AudioWorkletNode) n.port.postMessage('stop');
       }
     },
   };

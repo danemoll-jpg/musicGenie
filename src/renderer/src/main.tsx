@@ -8,17 +8,38 @@ import { installTestApi } from './testApi';
 import type { ScorePlayer } from './player';
 import type { BackingPlayer } from './audio/backing';
 import { MidiController } from './midi';
+import { AudioTracks } from './audioTracksCtl';
+import { audioCtl } from './AudioTracks';
+import { KeyboardPiano } from './kbdPiano';
+import { kbdCtl } from './Round4';
+import { liveSynth } from './audio/liveSynth';
+import { engine } from './audio/engine';
+import { PrintView } from './PrintView';
 import './styles.css';
 
-const store = new Store();
-let player: ScorePlayer | null = null;
-let backing: BackingPlayer | null = null;
-const midi = new MidiController(store, () => player);
+if (new URLSearchParams(location.search).get('print') === '1') {
+  // Hidden print window (PDF export): only the score pages.
+  createRoot(document.getElementById('root')!).render(<PrintView />);
+} else {
+  const store = new Store();
+  let player: ScorePlayer | null = null;
+  let backing: BackingPlayer | null = null;
+  const midi = new MidiController(store, () => player);
+  const audio = new AudioTracks(store, () => player);
+  audioCtl.current = audio;
+  const kbd = new KeyboardPiano(store, midi);
+  kbdCtl.current = kbd;
+  // Live notes (MIDI keyboard, keyboard piano, previews) play through the selected track's strip.
+  liveSynth.target = () => {
+    const t = store.state.song?.tracks[store.state.selTrack];
+    return (t && engine.graph.strip(t.id)?.input) ?? null;
+  };
 
-createRoot(document.getElementById('root')!).render(<App store={store} midi={midi} onPlayer={(p, b) => { player = p; backing = b; }} />);
+  createRoot(document.getElementById('root')!).render(<App store={store} midi={midi} onPlayer={(p, b) => { player = p; backing = b; }} />);
 
-void store.checkRecovery();
-void store.initSettings();
-setInterval(() => void store.autosaveNow(), window.mg.flags.autosaveMs);
-if (window.mg.flags.open) void store.openPath(window.mg.flags.open);
-if (window.mg.flags.hidden) installTestApi(store, () => player, () => backing, midi);
+  void store.checkRecovery();
+  void store.initSettings();
+  setInterval(() => void store.autosaveNow(), window.mg.flags.autosaveMs);
+  if (window.mg.flags.open) void store.openPath(window.mg.flags.open);
+  if (window.mg.flags.hidden) installTestApi(store, () => player, () => backing, midi, audio, kbd);
+}
