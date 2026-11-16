@@ -103,7 +103,7 @@ Dan's check list for Round 2 (fill in what you find):
   no note editing yet (Round 3/4); swing moves off-beat 8ths only; band parts never
   cross barlines; lead = the top line of the play-along track.
 
-### Round 3, "tab editing + Rocksmith" (2026-11-16): DONE except the Wwise step (Wwise not installed)
+### Round 3, "tab editing + Rocksmith" (2026-11-16): DONE (Wwise step finished after Dan installed Wwise 2023.1.19)
 Checks ran in the packaged app (`npm run e2e:r3`), hidden (off-screen, never shown or
 focusable) and `--mute`; speaker level measured 0 on every playing step (techniques
 playback pre 0.14, backing track pre 0.66, offline render 0). **No sound checks this round.**
@@ -131,16 +131,19 @@ Screenshots: `test-results/r3-*.png`; report `test-results/report-round3.json`.
 6. Audio for export: **done.** alphaTab offline render (~105x real time, silent) or a loaded
    recording (WAV/MP3/OGG/FLAC + offset). Check: Ode Rock mix WAV 38 401 ms vs song 38 400 ms
    (1 ms); "without the exported parts" also renders.
-7. Rocksmith export: **done up to Wwise; Wwise step not done (not installed).** Dialog: parts +
+7. Rocksmith export: **done.** Dialog: parts +
    Lead/Rhythm/Bass/Bonus, title/artist/album/year/art, preview start, audio choice, copy to
    `E:\Rocksmith2014\dlc`; writes notes, chords + fingerings, techniques, beats, sections,
    COUNT/END phrases, anchors; DD generated (14/14/11 levels). Check: Ode Rock bass, rhythm and
-   lead: **arrangement checks 0 issues**; stopped at Wwise and kept XML, WAV, preview, cover and
-   `.rs2dlc` (`r3-7-*.png`). Refuses non-guitar/bass and wrong string counts with a message.
-8. Round trip: **done (via the .rs2dlc, since no .psarc can be built without Wwise).**
-   Check: reopened export, 121/365/62 notes, **0 differences** in pitch/string/fret/techniques,
-   same sections and tunings (plus 1 lead-in and 1 tail bar, by design). Reference bass
-   import -> export: 541 notes out, 541 in the written XML, 0 check issues.
+   lead: **arrangement checks 0 issues**; Wwise 2023.1.19 made the song + preview .wem and the
+   `_p.psarc` was built (1.06 MB, stage "done"), plus XML, WAV, cover and `.rs2dlc`
+   (`r3-7-*.png`). Refuses non-guitar/bass and wrong string counts with a message. Without
+   Wwise it stops at that step and keeps everything else.
+8. Round trip: **done.** Check: reopened the export, 121/365/62 notes, **0 differences** in
+   pitch/string/fret/techniques, same sections and tunings (plus 1 lead-in and 1 tail bar, by
+   design); the built `_p.psarc` read back has 121/365/62 notes, 14/14/11 levels and its .wem
+   audio. Reference bass import -> export (full .psarc build): 541 notes out, 541 in the
+   written XML, 0 check issues; that copy is deleted after the check.
 
 Dan's check list for Round 3:
 - Run `dist\musicGenie-0.3.0-portable.exe` (or `npm run dev`). New ▸ Bass song: click a beat,
@@ -150,10 +153,9 @@ Dan's check list for Round 3:
   "keep the sound" / "keep the frets".
 - Open `TestData\private\Husker-Du_Could-You-Be-The-One_v1_p.psarc`: the bass tab should play
   along with the song audio ("Song audio" row: volume, mute, start offset).
-- **Wwise is needed to finish a Rocksmith song.** Only the Wwise Launcher is installed. In the
-  Wwise Launcher (signed in with your Audiokinetic account) install **Wwise 2021.1.x** (or
-  2023.1.x; 2019/2021/2022/2023 work), "Authoring" only; it goes to
-  `C:\Program Files (x86)\Audiokinetic\Wwise 2021.1.x`. musicGenie finds it by itself.
+- Wwise 2023.1.19 is installed (`C:\Audiokinetic\Wwise2023.1.19.8928`); musicGenie finds it
+  by itself. Don't take the Launcher's 2026 upgrade offer for this (Rocksmith tools need
+  2019-2023); having 2026 installed alongside is fine.
 - **Loading the exported song in Rocksmith 2014:** load a song with guitar/bass parts (or the
   Ode to Joy Rock band), ⇪ Rocksmith…, tick the parts, tick "Copy into E:\Rocksmith2014\dlc",
   Export. That writes `Documents\musicGenie\Rocksmith\<Artist>_<Title>\<Artist>_<Title>_v1_p.psarc`
@@ -161,7 +163,7 @@ Dan's check list for Round 3:
   CDLC patch: your `E:\Rocksmith2014` already has `D3DX9_42.dll` (the CDLC enabler). Start
   Rocksmith 2014 > Learn a Song > search the title or artist. Without Wwise: open the `.rs2dlc`
   from the same folder in DLC Builder and press Build > Release (it converts the audio).
-- Known limits: the export has not been tried in the game yet (no .psarc without Wwise);
+- Known limits: the built .psarc has not been tried in the game yet (that's your check);
   the tone is DLC Builder's default per arrangement; imports quantise to 32nd notes (no
   triplets); a Rocksmith import's tempo changes every beat (only big changes are drawn);
   the exported song gets a ~2 s count-in bar and a 1-bar ending.
@@ -257,10 +259,9 @@ Round 3 is done (see above). Wait for Dan's Round 3 check before starting Round 
   stem splitting (Demucs). Plug these in from existing tools, don't build them.
 
 ## Technical Notes / Blockers
-- **Blocker (Round 3, item 7): no Wwise version installed** (only Wwise Launcher 2026.2.0),
-  so the export cannot make .wem audio or a .psarc yet; it stops there and keeps a DLC
-  Builder project. Install Wwise 2021.1.x or 2023.1.x through the launcher, then re-run
-  `npm run e2e:r3 -- --only=7,8` to check the full .psarc build and its round trip.
+- Resolved 2026-11-16: the Wwise blocker (Round 3, item 7). Dan installed Wwise 2023.1.19 at
+  `C:\Audiokinetic\`; the helper now also searches there and reads `WWISEROOT` from the
+  registry. `npm run e2e:r3 -- --only=4,7,8` builds the full .psarc and round-trips it.
 - Reference Rocksmith file examined 2026-11-16 (Hüsker Dü, "Could You Be The
   One", bass): the .psarc holds the arrangement XML (song version 7: notes
   with time/string/fret/techniques, phrases, sections, 7 difficulty levels),

@@ -38,8 +38,39 @@ let progress (msg: string) =
 
 // ---------------- Wwise ----------------
 
+/// The library only looks at WWISEROOT and Program Files. The Wwise Launcher can install
+/// elsewhere (e.g. C:\Audiokinetic\Wwise2023.1.19.8928) and sets WWISEROOT in the registry,
+/// which processes started before the install don't see. Fill it in for this process.
+let ensureWwiseRoot () =
+    let usable (p: string) =
+        not (String.IsNullOrWhiteSpace p) && Directory.Exists p
+        && File.Exists(Path.Combine(p, "Authoring", "x64", "Release", "bin", "WwiseConsole.exe"))
+    let supported (name: string) =
+        Text.RegularExpressions.Regex.IsMatch(name, @"20(19|21|22|23)")
+    if not (usable (Environment.GetEnvironmentVariable "WWISEROOT")) then
+        let fromEnv =
+            [ EnvironmentVariableTarget.User; EnvironmentVariableTarget.Machine ]
+            |> List.map (fun t -> try Environment.GetEnvironmentVariable("WWISEROOT", t) with _ -> null)
+            |> List.filter (fun p -> usable p && supported (Path.GetFileName(p.TrimEnd('\\'))))
+        let searched () =
+            DriveInfo.GetDrives()
+            |> Array.filter (fun d -> d.DriveType = DriveType.Fixed && d.IsReady)
+            |> Array.collect (fun d ->
+                [| Path.Combine(d.RootDirectory.FullName, "Audiokinetic")
+                   Path.Combine(d.RootDirectory.FullName, "Program Files (x86)", "Audiokinetic")
+                   Path.Combine(d.RootDirectory.FullName, "Program Files", "Audiokinetic") |])
+            |> Array.filter Directory.Exists
+            |> Array.collect (fun root -> try Directory.GetDirectories root with _ -> [||])
+            |> Array.filter (fun p -> supported (Path.GetFileName p) && usable p)
+            |> Array.sortDescending
+            |> List.ofArray
+        match fromEnv @ searched () with
+        | p :: _ -> Environment.SetEnvironmentVariable("WWISEROOT", p)
+        | [] -> ()
+
 let findWwise () : JsonNode =
     try
+        ensureWwiseRoot ()
         let path = Wwise.getCLIPath ()
         let v = Diagnostics.FileVersionInfo.GetVersionInfo(path)
         jobj [ "found", jbool true; "path", jstr path; "version", jstr v.ProductVersion ]
@@ -449,6 +480,7 @@ let writePsarc (args: JsonNode) : JsonNode =
     else
     // 4. Wwise: convert the audio. Stop here (keeping everything above) if it cannot.
     progress "converting audio with Wwise"
+    ensureWwiseRoot ()
     let wwiseCli = match getStr args "wwiseConsole" "" with "" -> None | p -> Some p
     let wwiseError =
         try

@@ -129,11 +129,14 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   `-p:NuGetAudit=false` (the audit otherwise fails the submodule's own restore). Electron
   runs it at Below Normal (`src/main/rocksmithHelper.ts`). Export stops before Wwise if it
   is missing and keeps the XML, WAV, preview, cover and a DLC Builder `.rs2dlc`.
-- Wwise on Dan's PC (checked 2026-11-16): only the **Wwise Launcher 2026.2.0** is
-  installed (`C:\Program Files\Wwise Launcher\`); the launcher's `knownInstalls.json` is
-  empty and there is no `Program Files (x86)\Audiokinetic\Wwise 20xx`, so no Wwise version
-  is installed yet and .wem conversion cannot run. The helper looks in `%WWISEROOT%`, then
-  `Program Files (x86)\Audiokinetic\*20(19|21|22|23)*` (and Program Files).
+- Wwise on Dan's PC (installed 2026-11-16): **Wwise 2023.1.19.8928**, Authoring only, at
+  `C:\Audiokinetic\Wwise2023.1.19.8928` (WwiseConsole in `Authoring\x64\Release\bin`),
+  through the Wwise Launcher 2026.2.0 (`C:\Program Files\Wwise Launcher\`). The Launcher
+  lists only the newest Wwise (2026.x, unsupported) unless the version filter is set to All.
+  The launcher sets `WWISEROOT` in the registry; processes started earlier don't see it, so
+  the helper (`ensureWwiseRoot`) fills it in from the registry (User/Machine) or by searching
+  `X:\Audiokinetic`, `X:\Program Files (x86)\Audiokinetic`, `X:\Program Files\Audiokinetic`
+  on every fixed drive for a 2019/2021/2022/2023 folder.
 - Rocksmith 2014 on Dan's PC: `E:\Rocksmith2014` (not in a Steam library folder; Steam's
   manifest still lists app 221680 under C:). The helper searches Steam libraries, then
   `X:\Rocksmith2014`, `X:\SteamLibrary\...`, `X:\Games\...` on every fixed drive. Dan's
@@ -184,7 +187,7 @@ playback, instruments, mixer, speed, transpose, undo, autosave; virtual band
 (chord detection, part split, sections, 5 styles, band panel, GeneralUser GS);
 note/tab editing, techniques, tunings + capo, Rocksmith .psarc/.rs2dlc/.xml import with
 the song audio as a synced backing track, offline audio render, Rocksmith export
-(stops before Wwise until Dan installs a Wwise version).
+(full `_p.psarc` build with Wwise 2023.1.19; not yet tried in the game).
 Next: Round 4 (composition) in `TODO.md`, after Dan's Round 3 check.
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith),
