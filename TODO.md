@@ -128,7 +128,7 @@ Dan's check list for Round 3 (For Dan to check):
   triplets); a Rocksmith import's tempo changes every beat (only big changes are drawn);
   the exported song gets a ~2 s count-in bar and a 1-bar ending.
 
-### Round 4, "composition" (2026-11-16): DONE
+### Round 4, "composition" (2026-11-16): DONE in the app (Dan moved on; no real MIDI keyboard to test with, so item 7 is verified with simulated input only)
 Checks ran in the packaged 0.4.0 app (`npm run e2e:r4`), hidden (off-screen, never shown or
 focusable) and `--mute`; speaker level measured 0 on every step that made sound (piano-roll
 playback, chord preview, chord-chart playback, MIDI recording: pre-gain 0.07-0.42, speakers 0).
@@ -185,14 +185,75 @@ Dan's check list for Round 4 (For Dan to check):
   repeats writes onto the repeated bars; step entry uses the cursor beat's length (set it first);
   chord shapes stop at fret 15; the piano roll edits one staff at a time.
 
-## Current Objective
-Round 4 is done (see above). Wait for Dan's Round 4 check (and the in-game Rocksmith test) before starting Round 5.
+## Current Objective: Round 5, "production"
+Goal: make it sound like a finished recording and get it out of the app:
+per-track effects and a real mixer, recorded/imported audio tracks, and
+export to audio, stems, MIDI, MusicXML, Guitar Pro and printable PDF.
+Standing check for Dan (keep in "For Dan to check" until he reports):
+play an exported song in Rocksmith 2014.
+
+1. **Playback engine with per-track outputs (do this first, report the
+   choice).** Effects need each track as its own audio stream; alphaTab's
+   player mixes everything into one. Evaluate (a) a SoundFont synth with
+   separate outputs per track/channel (e.g. SpessaSynth) driven from our
+   model, with alphaTab kept for drawing and the cursor, versus (b) any
+   alphaTab option that gives per-track outputs. Pick the one that keeps the
+   cursor in sync and works offline (for export). Rounds 1-4 playback
+   features (cursor, loop, speed, swing, count-in, metronome, mute/solo,
+   backing track, Rocksmith render) must all still work. Check: the Round 1-4
+   app checks pass on the new engine; each track's output measured
+   separately (pre-gain level above 0 only on that track when soloed).
+2. **Mixer view.** A strip per track plus master: fader, pan, mute/solo,
+   level meter with clip light, an effects chain (add/remove/reorder/bypass),
+   and send levels to two shared buses (Reverb, Delay). Check: screenshot;
+   unit tests for gain/pan maths.
+3. **Effects.** EQ (3-band + parametric), compressor, gate, overdrive/
+   distortion, guitar and bass amp simulation (with cabinet impulse
+   responses), chorus, flanger/phaser, tremolo, delay (tempo-synced),
+   reverb (convolution with bundled freely licensed impulse responses;
+   note the licences in `CLAUDE.md`), master limiter. Presets per instrument
+   ("Clean guitar", "Crunch", "Lead", "Bass DI", "Bass drive", "Drum room",
+   "Vocal plate"...), saved user presets. Check: each effect changes the
+   measured signal in the expected way (e.g. a low-cut EQ lowers energy below
+   the cutoff) in an offline render; screenshot of an amp chain.
+4. **Automation.** Volume, pan and any effect knob can change over time:
+   draw/edit points in a lane under the track, plays back and renders.
+   Check: a volume fade-out measured in an offline render.
+5. **Audio tracks.** Import WAV/MP3/OGG/FLAC onto a new audio track; move,
+   trim, split, fade in/out, clip gain; it stays at its bar position when the
+   tempo changes (option to stretch is NOT needed this round). Record from
+   any audio input (device picker, e.g. a USB interface or the Rocksmith
+   Real Tone Cable), with count-in, metronome, input level meter, input
+   monitoring off by default, and a latency setting with a loopback test.
+   Media is saved in a folder next to the project (`<name>_media/`);
+   "Save as package" zips project + media into one `.mgpack`. No real
+   input in tests: use a simulated input stream. Check: a simulated
+   recording lands at the expected bar with the latency offset applied.
+6. **Computer keyboard as a piano** (Dan has no MIDI keyboard): the
+   A-S-D-F row = white keys, W-E-T-Y-U = black keys, Z/X = octave down/up,
+   C/V = velocity; works for hearing notes, step entry and recording, the
+   same as a MIDI keyboard. Only active while a "Keyboard piano" toggle is
+   on, so it never clashes with shortcuts. Check: simulated key presses
+   record the expected notes.
+7. **Export.** File > Export: mixdown WAV and MP3 (with effects, offline,
+   faster than real time), optional loudness normalise (-14 LUFS) and a
+   peak limit; stems (one WAV per track or per bus); MIDI; MusicXML; Guitar
+   Pro (.gp, if alphaTab's exporter works); PDF/print of the full score or
+   chosen parts (notation, tabs or both; title, composer, page numbers; page
+   size Letter/A4). Check: exported MIDI and MusicXML re-import with the same
+   note counts; WAV length matches the song within 50 ms; loudness within
+   1 LU of target; PDF screenshot of page 1.
+8. **Save/load, undo, regression.** Mixer, effects, automation and audio
+   clips survive save/reopen (and `.mgpack` open on its own); each edit is
+   one undo step; the Round 1-4 app checks still pass on the new exe.
+
+### For Dan to check (fill in at end of round)
+- Play an exported song in Rocksmith 2014 (timing, note placement,
+  difficulty levels). Still pending from Round 3.
 
 ## Next Steps (Do Not Start Yet)
-- **Round 5: production.** Effects (reverb, delay, distortion, EQ,
-  compression), recorded audio tracks, export WAV/MP3/MIDI/MusicXML/PDF.
-- **Later, unordered:** better
-  sound libraries / VST3 instruments, singing, "describe it" assisted
+- **Later, unordered:** test item 7 of Round 4 with a real MIDI keyboard if
+  Dan gets one; better sound libraries / VST3 instruments, singing, "describe it" assisted
   composition, PDF score reading (Audiveris), audio to notes (basic-pitch),
   stem splitting (Demucs). Plug these in from existing tools, don't build them.
 

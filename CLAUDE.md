@@ -208,19 +208,13 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Rounds 1-4 done: import (MusicXML, Guitar Pro, MIDI), score + tab view,
-playback, instruments, mixer, speed, transpose, undo, autosave; virtual band
-(chord detection, part split, sections, 5 styles, band panel, GeneralUser GS);
-note/tab editing, techniques, tunings + capo, Rocksmith .psarc/.rs2dlc/.xml import with
-the song audio as a synced backing track, offline audio render, Rocksmith export
-(full `_p.psarc` build with Wwise 2023.1.19; not yet tried in the game).
-Round 4 (composition): piano roll, chord explorer, progression helper, drum step
-sequencer, chord-chart songs + key/time/tempo changes, harmony lines, MIDI keyboard
-(`src/renderer/src/Round4.tsx` dock + dialogs, `PianoRoll.tsx`, `DrumGrid.tsx`,
-`ChordExplorer.tsx`, `Progressions.tsx`, `midi.ts`).
-Round 3's in-game Rocksmith test is still pending Dan.
-Next: Round 5 (production) in `TODO.md`, after Dan's Round 4 check.
-Round 1 is archived in `TODO-ARCHIVE.md` (grep it, never read it in full).
+Rounds 1-4 done: import, score/tab view, playback, mixer basics, undo,
+autosave; virtual band (5 styles); tab editing, techniques, tunings,
+Rocksmith .psarc import/export (in-game test still pending Dan); piano roll,
+chord explorer, progression helper, drum grid, chord charts, key/time/tempo
+changes, harmony, MIDI keyboard. Current round: Round 5, production (per-track
+playback engine, mixer, effects, automation, audio tracks, keyboard piano,
+export).
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
 progressions, drums, songChanges, chart, harmony, recording),
