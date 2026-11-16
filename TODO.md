@@ -8,52 +8,51 @@
 - One check per item, done in the built app, with screenshots you look at.
 
 ## Completed Tasks
-None yet.
+### Round 1, "import it, see it, hear it with other instruments" (2026-11-16): DONE
+All checks ran in the built app, hidden (off-screen, never shown/focusable) and
+`--mute`; speaker level (post-gain analyser) measured 0 on every playing step.
+Unit tests: 24/24 pass (`npm test`). Screenshots: `test-results/*.png`.
+1. Project setup: **done.** Electron 45 + TS + electron-vite (Vite 8) + React 19,
+   Vitest, `.gitignore`, `npm run dist` -> portable exe + `win-unpacked`, `--mute`,
+   Playwright harness (`tests/e2e`). Check: packaged exe hidden + focused=false,
+   playing: pre-gain peak 0.61, speaker peak **0**.
+2. Model + .mgproj: **done.** Song/bars/tempo map/sections/chords/lyrics,
+   tracks (instrument, tuning, capo, mixer, display), staves/measures/voices/beats/
+   notes with string, fret and all listed techniques. Check: save -> reopen is
+   deep-equal for all 4 test songs; schemaVersion 99 rejected with a clear message.
+3. Import: **done.** Counts match the source: MusicXML 1/16/108 (tracks/measures/
+   notes, independent XML count), GP7 11/96/4422, GP5 1/2/20, GP3 1/1/28,
+   MIDI 2/35/549 (vs @tonejs/midi). Sources in `TestData/README.md`.
+4. Score view: **done.** Per-track show/hide and notation/tab/both. Check:
+   piano notation (both hands) and GP acoustic guitar as notation + tab screenshots.
+5. Playback: **done.** Play/pause/stop, cursor + note highlight, click a beat to
+   play from there, drag-select bars + Loop, metronome, count-in. Check: cursor in
+   bar 3 at screenshot; pause holds; seek -> bar 9; loop stayed in bars 5-6.
+6. Tracks panel: **done.** Grouped instrument picker (8 groups), M/S, volume, pan,
+   per-track transpose. Check: piano -> electric guitar leaves notes identical
+   (unit + app). **Sound check: item 6 step, unmuted 2.06 s** (speaker peak 0.32,
+   0 after). A first 3 s attempt also played; its "after" reading failed on
+   analyser lag, harness fixed.
+7. Speed + transpose: **done.** Speed 25-150% (practice only). Check: 50% plays at
+   0.50x tick rate, song unchanged; +2 raises all 108 pitches by 2, C -> D major,
+   chord C -> D; frets re-placed to playable positions (unit tests).
+8. Undo/redo + autosave: **done.** Every edit undoable (Ctrl+Z / Ctrl+Y), autosave
+   every 2 min, restore banner after a crash. Check: unit + app undo/redo exact;
+   killed the app after autosave, relaunch showed the restore offer, restore worked.
 
-## Current Objective: Round 1, "import it, see it, hear it with other instruments"
-Goal: open a piano piece, show it as notation/tabs, give its parts other
-instruments, and play it with the score following along.
+### For Dan to check
+- Run `dist\musicGenie-0.1.0-portable.exe` (or `npm run dev`). Open
+  `TestData\ode-to-joy-piano.musicxml`, press Play: does it sound right and does
+  the cursor follow? Then switch Piano to Electric Guitar and to a guitar view.
+- Open `TestDataull-song.gp`: hide tracks, switch a guitar to Tab/Both.
+- Drag across bars, tick Loop; try Speed 50%; Transpose +2; Undo.
+- Known limits: MIDI import quantises to 16ths (no triplets yet) and holds only
+  one voice per staff; the default sonivox SoundFont sounds basic; app has the
+  default Electron icon; exe is unsigned (SmartScreen may warn).
 
-1. **Project setup.** Electron + TypeScript + Vite, Vitest for unit tests,
-   `.gitignore` (node_modules, build output), a Windows build (installer or
-   portable exe), the `--mute` flag, and a test harness that starts the app
-   hidden and takes screenshots. Put exact commands in `CLAUDE.md`.
-   Check: the built exe starts hidden with `--mute`, a screenshot is taken,
-   and the measured output level is 0.
-2. **Music model + project files.** The model described in `CLAUDE.md`
-   (including string/fret/techniques on notes, instrument + tuning on tracks,
-   tempo map, sections, chord symbols, lyrics). Save/load `.mgproj` with
-   `schemaVersion`. Check: unit tests pass; a saved and reopened project is
-   identical (deep-equal).
-3. **Import.** MusicXML and Guitar Pro (3-7) via alphaTab's importers, MIDI via
-   `@tonejs/midi`, all converted into our model. Collect a few freely
-   licensed test files in `TestData/` (note the source of each in
-   `TestData/README.md`), including one piano piece with both hands.
-   Check: one file of each type; track, measure and note counts match the
-   source.
-4. **Score view.** Show the song with alphaTab: per track choose notation,
-   tabs or both; choose which tracks are shown. Check: screenshot of a piano
-   piece as notation, and of a guitar track as notation + tabs.
-5. **Playback.** Play/pause/stop; the cursor follows and highlights the
-   current notes; click a measure to play from there; loop a selected range;
-   metronome and count-in toggles. Check: hidden, muted run; screenshot
-   partway through shows the cursor in the expected measure.
-6. **Tracks panel.** Per track: instrument picker (grouped: keys, guitars,
-   basses, strings, brass, winds, synths, drums), mute, solo, volume, pan.
-   Changing the instrument changes the sound only, never the notes.
-   Check: change a piano track to electric guitar; the model's notes are
-   unchanged (test); one sound check of 10 seconds or less.
-7. **Speed and transpose.** Playback speed 25-150% (practice setting, does not
-   change the song), and transpose the whole song or one track by semitones
-   (changes the song; guitar/bass string and fret are recalculated to
-   playable positions). Check: transpose +2 and verify pitches in a test;
-   screenshot of the transposed score.
-8. **Undo/redo + autosave.** Undo/redo for every model edit in this round
-   (instrument, transpose, track settings). Autosave a recovery copy every 2
-   minutes; offer to restore it after a crash. Check: unit test for
-   undo/redo; kill the app and confirm the restore offer appears.
-
-### For Dan to check (fill in at end of round)
+## Current Objective
+Round 1 is finished and waiting for Dan's check. Do not start Round 2 until Dan
+says so.
 
 ## Next Steps (Do Not Start Yet)
 - **Round 2: virtual band v1.** Split a piano part into melody / bass /

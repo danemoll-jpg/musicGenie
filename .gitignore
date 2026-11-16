@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+release/
+test-results/
+*.log
+.vite/
+src/renderer/public/font/
+src/renderer/public/soundfont/

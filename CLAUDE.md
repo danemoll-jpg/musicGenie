@@ -7,8 +7,7 @@ parts as Rocksmith 2014 custom songs. Full vision and roadmap:
 
 ## Tech Stack (decided 2026-11-16)
 - **App:** Electron + TypeScript, built with Vite (electron-vite is fine).
-  Plain TS + a light UI layer (React or Svelte, Code's pick; say which in the
-  Round 1 report and keep it).
+  Plain TS + a light UI layer: **React 19** (picked in Round 1; keep it).
 - **Notation / tabs / playback:** alphaTab (`@coderline/alphatab`). It draws
   standard notation and guitar tabs, plays through its built-in SoundFont
   synth, and moves a cursor along the score as it plays. Start with the
@@ -46,7 +45,41 @@ parts as Rocksmith 2014 custom songs. Full vision and roadmap:
   plain Node.
 
 ## Commands
-<!-- Code fills these in during Round 1: install, dev run, build exe, tests. -->
+Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm run dist"`.
+- Install: `npm install`, then `node node_modules/electron/install.js` (npm 11's
+  allow-scripts skips Electron's binary download).
+- Dev run (visible window, for Dan): `npm run dev`
+- Unit tests (model, import counts, save/load, transpose, undo): `npm test`
+- Typecheck: `npm run typecheck`
+- Build: `npm run build` (-> `out/`). Windows app: `npm run dist` ->
+  `dist/win-unpacked/musicGenie.exe` + `dist/musicGenie-<ver>-portable.exe`.
+- App checks (hidden + muted, screenshots in `test-results/`, report in
+  `test-results/report.json`): `npm run e2e` (packaged exe) or `npm run e2e:dev`
+  (after `npm run build`). Options: `--only=1,5`, `--no-sound-check`.
+  Item 6 is the only step that unmutes (2 s); always pass `--no-sound-check`
+  unless a sound check is actually needed.
+- Regenerate the MusicXML test piece: `node tests/fixtures/make-ode-to-joy.mjs`
+
+## Standing facts
+- App flags: `--mute` (master gain 0 before any audio), `--hidden` (off-screen
+  rendering, never shown or focusable, exposes `window.mgTest`),
+  `--profile-dir=DIR`, `--autosave-ms=N` (default 120000), `--open=FILE`.
+- Master bus (`src/renderer/src/audio/masterBus.ts`) patches
+  `AudioNode.connect` so everything bound for the speakers goes pre-analyser ->
+  gain -> post-analyser. `post` peak is the proof of silence; `pre` peak proves
+  audio was really produced. It must stay the FIRST import in `main.tsx`.
+- Hidden windows use `webPreferences.offscreen` in test mode: plain
+  `show:false` windows returned stale `capturePage()` screenshots.
+- alphaTab 1.9 quirks: key signatures live on `Bar`, not `MasterBar`; every bar
+  of a staff needs the same voice count; string 1 = LOWEST string (our model
+  uses the same; tuning arrays are lowest-first, alphaTab's highest-first);
+  `clearPlaybackRangeHighlight()` leaves private `_selectionStart/_selectionEnd`
+  that crash the next render, so `ScorePlayer.clearRange()` resets them.
+  Rendering runs on the page thread (`core.useWorkers = false`) so errors surface.
+- Model ticks: PPQ 960 (same as alphaTab). MIDI import quantises to 16ths and
+  splits one two-hand piano track into treble/bass staves at middle C.
+- Recovery: `userData/recovery/session.lock` + `autosave.mgproj`; a lock left by
+  a crash turns the autosave into a restore offer on next start.
 
 ## Testing on Dan's PC: STANDING RULES
 Dan uses his PC while you test. Your test runs must not be heard and must not
@@ -76,5 +109,9 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-New, empty repo. Round 1 (app shell, music model, import, score + tab view,
-instrument assignment, playback) is the current round.
+Round 1 done 2026-11-16 (all 8 items; see `TODO.md` "Completed Tasks" and
+"For Dan to check"). Next: Round 2 (virtual band v1) once Dan has checked
+Round 1. Layout: `src/model` (pure model + edits + undo + .mgproj),
+`src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
+`src/main` (Electron), `src/preload`, `src/renderer` (React UI, player,
+store, test API), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).
