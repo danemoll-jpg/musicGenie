@@ -76,7 +76,7 @@ select { font: inherit; padding: 3px 4px; border: 1px solid var(--line); border-
 .tag { font-size: 10px; padding: 0 5px; border-radius: 8px; background: #e7ecff; color: var(--accent); font-weight: 600; text-transform: lowercase; }
 .tag.edited { background: #fff3bf; color: #a35f00; }
 button.split { padding: 1px 6px; font-size: 11px; }
-.modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; z-index: 2000; }
 .modal { background: var(--panel); border-radius: 10px; padding: 16px 18px; max-width: 440px; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
 .modal p { margin: 0 0 14px; line-height: 1.4; }
 .chord-picker { position: absolute; z-index: 20; background: var(--panel); border: 1px solid #bdbab3; border-radius: 8px; padding: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); display: flex; flex-direction: column; gap: 6px; }
@@ -86,3 +86,26 @@ button.split { padding: 1px 6px; font-size: 11px; }
 .menu button { text-align: left; }
 .menu-info { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .at-host text { cursor: default; }
+
+/* Round 3: editing, tunings, recording row, Rocksmith dialog */
+.editbar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 12px; background: #f3f6ff; border-bottom: 1px solid var(--line); }
+.editbar .where { font-weight: 600; min-width: 220px; }
+.editbar button { padding: 2px 7px; min-width: 26px; }
+.editbar .palette button { font-family: "Segoe UI Symbol", "Segoe UI", sans-serif; }
+.editbar .hint { flex-basis: 100%; }
+.edit-cursor { position: absolute; pointer-events: none; background: rgba(232, 89, 12, .12); border: 1.5px solid rgba(232, 89, 12, .85); border-radius: 3px; z-index: 5; }
+.edit-note { position: absolute; pointer-events: none; border: 2px solid #e8590c; border-radius: 4px; z-index: 6; }
+.row4 { display: flex; gap: 5px; align-items: center; }
+.row4 select:first-child { flex: 1; min-width: 0; }
+.row4 button { padding: 1px 6px; }
+.track.backing { background: #fbfaf7; }
+input.num { width: 64px; font: inherit; padding: 2px 4px; border: 1px solid var(--line); border-radius: 5px; }
+.modal.wide { max-width: 640px; width: 640px; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.modal input:not([type]), .modal input[type=number] { font: inherit; padding: 3px 5px; border: 1px solid var(--line); border-radius: 5px; }
+.mtitle { margin: 0 0 6px; font-size: 15px; }
+.strings { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.strings .sub { width: 120px; }
+.problem { color: #c92a2a; font-size: 12px; }
+.path { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; max-width: 330px; }
+.result { border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 4px; background: #fbfaf7; }
+.menu.left { left: 0; right: auto; width: 260px; }

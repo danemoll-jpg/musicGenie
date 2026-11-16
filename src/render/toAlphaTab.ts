@@ -24,6 +24,14 @@ export function toAlphaTabScore(song: Song, settings: alphaTab.Settings, opts: R
   score.album = song.album;
   score.music = song.composer;
 
+  // Tempo marks: always the first; after that only changes of 3% or more from the last one shown,
+  // so a human-played tempo map (e.g. a Rocksmith chart, a new tempo every beat) stays readable.
+  let shownBpm = -1;
+  const showTempo = (bpm: number) => {
+    if (shownBpm > 0 && Math.abs(bpm - shownBpm) / shownBpm < 0.03) return false;
+    shownBpm = bpm;
+    return true;
+  };
   song.bars.forEach((b, i) => {
     const mb = new m.MasterBar();
     mb.timeSignatureNumerator = b.timeSignature.numerator;
@@ -31,7 +39,8 @@ export function toAlphaTabScore(song: Song, settings: alphaTab.Settings, opts: R
     if (b.repeatStart) mb.isRepeatStart = true;
     if (b.repeatEnd) mb.repeatCount = b.repeatEnd;
     for (const tc of song.tempos.filter((x) => x.bar === i)) {
-      mb.tempoAutomations.push(m.Automation.buildTempoAutomation(false, tc.tick / barTicks(b), tc.bpm, 2));
+      const shown = showTempo(tc.bpm);
+      mb.tempoAutomations.push(m.Automation.buildTempoAutomation(false, tc.tick / barTicks(b), tc.bpm, 2, shown));
     }
     const sec = song.sections.find((s) => s.bar === i);
     if (sec) {
@@ -155,7 +164,8 @@ function buildStaves(track: alphaTab.model.Track, t: Track, song: Song, showChor
               note.percussionArticulation = n.pitch;
             } else if (fretted && pos) {
               note.string = pos.string;
-              note.fret = pos.fret;
+              // Our frets count from the nut; alphaTab's count from the capo.
+              note.fret = Math.max(0, pos.fret - (t.capo ?? 0));
             } else {
               note.octave = Math.floor(n.pitch / 12);
               note.tone = n.pitch % 12;
@@ -196,6 +206,11 @@ function buildStaves(track: alphaTab.model.Track, t: Track, song: Song, showChor
               if (tq.dead) note.isDead = true;
               if (tq.ghost) note.isGhost = true;
               if (tq.staccato) note.isStaccato = true;
+              if (tq.tremolo && !beat.tremoloPicking) {
+                const tp = new m.TremoloPickingEffect();
+                tp.marks = 3; // 32nds
+                beat.tremoloPicking = tp;
+              }
             }
             beat.addNote(note);
             if (pos) lastOnString.set(`${vi}:${pos.string}`, note);

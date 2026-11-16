@@ -143,7 +143,8 @@ function convertNote(n: alphaTab.model.Note, b: alphaTab.model.Beat, fretted: bo
   };
   if (fretted && n.isStringed) {
     note.string = n.string;
-    note.fret = n.fret;
+    // alphaTab counts frets from the capo; our model counts from the nut.
+    note.fret = n.fret + (b.voice.bar.staff.capo ?? 0);
   }
   if (n.isTieDestination) note.tieFromPrevious = true;
   const t: Techniques = {};
@@ -177,6 +178,7 @@ function convertNote(n: alphaTab.model.Note, b: alphaTab.model.Beat, fretted: bo
   if (n.isDead) t.dead = true;
   if (n.isGhost) t.ghost = true;
   if (n.isStaccato) t.staccato = true;
+  if (b.isTremolo) t.tremolo = true;
   if (Object.keys(t).length) note.techniques = t;
   return note;
 }

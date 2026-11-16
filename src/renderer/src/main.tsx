@@ -6,15 +6,17 @@ import { App } from './App';
 import { Store } from './store';
 import { installTestApi } from './testApi';
 import type { ScorePlayer } from './player';
+import type { BackingPlayer } from './audio/backing';
 import './styles.css';
 
 const store = new Store();
 let player: ScorePlayer | null = null;
+let backing: BackingPlayer | null = null;
 
-createRoot(document.getElementById('root')!).render(<App store={store} onPlayer={(p) => (player = p)} />);
+createRoot(document.getElementById('root')!).render(<App store={store} onPlayer={(p, b) => { player = p; backing = b; }} />);
 
 void store.checkRecovery();
 void store.initSettings();
 setInterval(() => void store.autosaveNow(), window.mg.flags.autosaveMs);
 if (window.mg.flags.open) void store.openPath(window.mg.flags.open);
-if (window.mg.flags.hidden) installTestApi(store, () => player);
+if (window.mg.flags.hidden) installTestApi(store, () => player, () => backing);

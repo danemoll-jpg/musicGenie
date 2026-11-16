@@ -19,7 +19,8 @@ parts as Rocksmith 2014 custom songs. Full vision and roadmap:
 - **Rocksmith (Round 3+):** a small .NET 8 helper (`helpers/rocksmith/`) using
   iminashi's Rocksmith2014.NET libraries (the same code DLC Builder uses) to
   read and write .psarc files and generate difficulty levels. Converting audio
-  to .wem needs Wwise 2019 or 2021 installed on Dan's PC.
+  to .wem needs Wwise 2019/2021/2022/2023 installed on Dan's PC (DLC Builder
+  documents 2019 and 2021; the library also accepts 2022 and 2023).
 - **Later plug-in tools, not built ourselves:** Audiveris (reading PDF scores),
   basic-pitch (audio to notes), Demucs (splitting a recording into stems),
   OpenUtau/DiffSinger or Synthesizer V export (singing).
@@ -64,6 +65,16 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
 - From Git Bash, `cmd //c "start /belownormal ..."` hangs: run Below Normal builds from
   PowerShell (`cmd /c "start /belownormal /b /wait npm run build"`).
 - Regenerate the MusicXML test piece: `node tests/fixtures/make-ode-to-joy.mjs`
+- Rocksmith helper (.NET 8, needs the .NET SDK 8+ to build and the .NET 8 runtime to run):
+  `git submodule update --init` once, then from PowerShell
+  `cmd /c "start /belownormal /b /wait npm run helper"` -> `helpers/rocksmith/bin/MgRocksmith.exe`
+  (gitignored). Build it BEFORE `npm run dist`: the exe ships it as `resources/rocksmith/`.
+  One-shot use: `MgRocksmith.exe ping|findWwise|findRocksmith`, `MgRocksmith.exe read <file.psarc>`;
+  JSON args go over stdin (`{"id":1,"cmd":"write","args":{...}}`, one per line).
+- Round 3 app checks: `npm run e2e:r3` (packaged) / `npm run e2e:r3:dev`; report
+  `test-results/report-round3.json`. No sound checks. Items 4, 5 and 8 use the private
+  reference file `TestData/private/Husker-Du_...psarc` and skip without it; its unpacked
+  copies and re-export are deleted at the end of the run.
 
 ## Standing facts
 - App flags: `--mute` (master gain 0 before any audio), `--hidden` (off-screen
@@ -90,9 +101,48 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   "use it in your software projects", may repackage). `public/soundfont/` and
   `public/font/` are gitignored (the alphaTab Vite plugin fills them). The user's
   SoundFont path is in `userData/settings.json` and in the project (`playback.soundFont`).
-- Project format v2 (`SCHEMA_VERSION = 2`): `song.playback` (swing, soundFont),
+- Project format v3 (`SCHEMA_VERSION = 3`): v2 = `song.playback` (swing, soundFont),
   `song.band` (panel setup), `track.generated` (style, role, complexity, seed,
-  sectionSeeds, contentHash), `track.derived` (split parts), `chordSymbols[].source`.
+  sectionSeeds, contentHash), `track.derived` (split parts), `chordSymbols[].source`;
+  v3 adds `song.backing` (recording: path, offsetMs = where bar 1 starts in it, volume,
+  mute), `song.rocksmith` (last export settings), `track.rocksmith` (arrangement type,
+  tone), techniques `tremolo` and `slideToFret`. Older files open unchanged.
+- Frets count from the NUT, also with a capo (pitch = tuning[string-1] + fret), like
+  Rocksmith. alphaTab counts from the capo: `toAlphaTab` subtracts the capo, `fromAlphaTab`
+  adds it. Typing "0" on a capoed string means the capo fret.
+- Note editing (`src/model/noteEdit.ts`): pure cursor edits; every voice is refitted to
+  exactly one bar after an edit (rests fill, overflow drops beats from the end). Keys in
+  `src/renderer/src/editor.ts`; tests drive them with `mgTest.key()` (window keydown, no
+  OS focus needed).
+- Rocksmith (`src/model/rocksmith.ts`, pure): the helper turns .psarc/.rs2dlc/.xml into
+  JSON (times in ms, strings 0-based, raw note masks, all difficulty levels merged with
+  `RemoveDD`) and back. Import: every ebeat = one quarter note at its own tempo (tempo map
+  per beat, 32nd grid); stray markers closer than 1/4 beat are dropped. Export adds a
+  lead-in (whole bars, >= 2 s, COUNT phrase) and a one-bar tail (END phrase + `noguitar`),
+  phrases one per section, auto anchors, chord templates + handshapes; the WAV gets the same
+  lead-in so chart and audio line up. Re-importing an export therefore has the lead-in bars
+  in front and the tail bar at the end.
+- Rocksmith helper (`helpers/rocksmith/MgRocksmith`, F#): Rocksmith2014.NET by iminashi,
+  **MIT licence**, git submodule `helpers/rocksmith/Rocksmith2014.NET` pinned to tag
+  **v3.5.0** (only `Rocksmith2014.XML` is on NuGet). The library pins Magick.NET 14.7.0,
+  which has security advisories: the helper references the patched 14.17.2 and builds with
+  `-p:NuGetAudit=false` (the audit otherwise fails the submodule's own restore). Electron
+  runs it at Below Normal (`src/main/rocksmithHelper.ts`). Export stops before Wwise if it
+  is missing and keeps the XML, WAV, preview, cover and a DLC Builder `.rs2dlc`.
+- Wwise on Dan's PC (checked 2026-11-16): only the **Wwise Launcher 2026.2.0** is
+  installed (`C:\Program Files\Wwise Launcher\`); the launcher's `knownInstalls.json` is
+  empty and there is no `Program Files (x86)\Audiokinetic\Wwise 20xx`, so no Wwise version
+  is installed yet and .wem conversion cannot run. The helper looks in `%WWISEROOT%`, then
+  `Program Files (x86)\Audiokinetic\*20(19|21|22|23)*` (and Program Files).
+- Rocksmith 2014 on Dan's PC: `E:\Rocksmith2014` (not in a Steam library folder; Steam's
+  manifest still lists app 221680 under C:). The helper searches Steam libraries, then
+  `X:\Rocksmith2014`, `X:\SteamLibrary\...`, `X:\Games\...` on every fixed drive. Dan's
+  choice is saved as `rocksmithDlc` in `userData/settings.json`.
+- Backing track: an `<audio>` element follows the player position (seek on start/jumps,
+  re-seek past 120 ms drift) through the master bus, so `--mute` covers it.
+- Audio export: alphaTab's `exportAudio` synthesises offline (~100x real time, never
+  through the speakers; it ignores swing and stored mute/solo, so `renderMix` sets track
+  volumes itself).
 - Band engine (`src/model/band.ts`) is pure and seeded: same song + settings + seed = same
   notes. "Edited by hand" = staves hash differs from `generated.contentHash`.
 - Swing is applied at playback only, in `api.midiLoad` (`src/render/swing.ts`).
@@ -129,13 +179,17 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Rounds 1-2 done: import (MusicXML, Guitar Pro, MIDI), score + tab view,
+Rounds 1-3 done: import (MusicXML, Guitar Pro, MIDI), score + tab view,
 playback, instruments, mixer, speed, transpose, undo, autosave; virtual band
-(chord detection, part split, sections, 5 styles, band panel, GeneralUser GS).
-Current round: Round 3, note/tab editing, techniques, tunings, and Rocksmith
-.psarc import + export through the .NET helper.
+(chord detection, part split, sections, 5 styles, band panel, GeneralUser GS);
+note/tab editing, techniques, tunings + capo, Rocksmith .psarc/.rs2dlc/.xml import with
+the song audio as a synced backing track, offline audio render, Rocksmith export
+(stops before Wwise until Dan installs a Wwise version).
+Next: Round 4 (composition) in `TODO.md`, after Dan's Round 3 check.
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
-sections, band engine),
+sections, band engine, noteEdit, tunings, tempo, rocksmith),
 `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
-`src/main` (Electron, settings.json), `src/preload`, `src/renderer` (React UI,
-Band panel, dialogs, player, store, test API), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).
+`src/main` (Electron, settings.json, Rocksmith helper process), `src/preload`,
+`src/renderer` (React UI, Band panel, dialogs, Round3.tsx edit bar/tuning/export dialog,
+editor keys, player, backing + offline audio, store, test API), `helpers/rocksmith`
+(.NET helper + library submodule), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).

@@ -1,4 +1,5 @@
 import { instrumentForProgram } from './instruments';
+import { restMeasure } from './noteEdit';
 import type { BarHeader, Measure, Song, Staff, Track } from './types';
 
 export function emptySong(title = 'Untitled'): Song {
@@ -31,4 +32,17 @@ export function newTrack(id: string, name: string, program: number, percussion: 
     track.display.mode = 'both';
   }
   return track;
+}
+
+/** A new, empty song with one guitar or bass track: `bars` bars of 4/4 rests at 120 bpm. */
+export function newSong(kind: 'guitar' | 'bass', bars = 8): Song {
+  const song = emptySong('Untitled');
+  song.bars = Array.from({ length: bars }, () => defaultBar());
+  const program = kind === 'bass' ? 33 : 27;
+  const t = newTrack('t1', kind === 'bass' ? 'Bass' : 'Guitar', program, false, [
+    { clef: kind === 'bass' ? 'bass' : 'treble', measures: song.bars.map((b) => restMeasure(b)) },
+  ]);
+  t.display.mode = kind === 'bass' ? 'tab' : 'both';
+  song.tracks.push(t);
+  return song;
 }

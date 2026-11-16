@@ -7,7 +7,7 @@ import {
   applyDetectedChords, chordAt, chordTones, countNoteOnsets, defaultBand, detectChords, editedGeneratedTracks,
   findInstrument, generateBand, GM, hashOf, History, instrumentRange, noteAddresses, parseChord, parseProject,
   regenerate, sameChord, sectionRanges, serializeProject, setChordSymbol, setSection, splitTrack, STYLE_IDS,
-  barStartTicks, durationTicks, type Song, type StyleId, type Track, classifyParts,
+  barStartTicks, durationTicks, type Song, type StyleId, type Track, classifyParts, SCHEMA_VERSION,
 } from '../../src/model';
 import { readTestFile } from './helpers';
 
@@ -360,7 +360,7 @@ describe('save/load + undo (Round 2 data)', () => {
     expect(back).toStrictEqual(song);
     expect(back.tracks.some((t) => t.generated?.sectionSeeds)).toBe(true);
     expect(back.tracks.some((t) => t.derived)).toBe(true);
-    expect(JSON.parse(serializeProject(song)).schemaVersion).toBe(2);
+    expect(JSON.parse(serializeProject(song)).schemaVersion).toBe(SCHEMA_VERSION);
   });
   it('a v1 project still opens', () => {
     const text = serializeProject(ode()).replace('"schemaVersion": 2', '"schemaVersion": 1');

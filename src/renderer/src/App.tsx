@@ -1,27 +1,35 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { hashOf, INSTRUMENT_GROUPS, INSTRUMENTS, STYLES, type DisplayMode, type Track } from '../../model';
+import { BackingPlayer } from './audio/backing';
 import { BandPanel } from './BandPanel';
+import { editorKey } from './editor';
 import { ChordPickerPopover, ConfirmDialog, SettingsMenu } from './Overlays';
 import { DEFAULT_SOUNDFONT, ScorePlayer, type PlayerStatus } from './player';
+import { BackingRow, CursorOverlay, EditBar, RocksmithDialog, TuningControls, TuningDialog } from './Round3';
 import type { AppState, Store } from './store';
 
 function useStore(store: Store): AppState {
   return useSyncExternalStore((f) => store.on(f), () => store.state);
 }
 
-export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlayer) => void }) {
+export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlayer, b: BackingPlayer) => void }) {
   const state = useStore(store);
   const hostRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [player, setPlayer] = useState<ScorePlayer | null>(null);
   const [status, setStatus] = useState<PlayerStatus | null>(null);
   const [showBand, setShowBand] = useState(true);
+  const [newMenu, setNewMenu] = useState(false);
   const loadedSoundFont = useRef<string | null>(null);
+  const backingRef = useRef<BackingPlayer | null>(null);
 
   useEffect(() => {
     const p = new ScorePlayer(hostRef.current!, scrollRef.current!);
+    const b = new BackingPlayer(p);
+    backingRef.current = b;
+    p.onBeatClick = (hit) => store.setCursor({ ...hit, string: hit.string ?? store.state.cursor?.string ?? 1 });
     setPlayer(p);
-    onPlayer(p);
+    onPlayer(p, b);
     const off = p.on(setStatus);
     return () => {
       off();
@@ -31,7 +39,12 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
 
   useEffect(() => {
     if (player && state.song) player.show(state.song, state.loadId);
+    void backingRef.current?.setSong(state.song);
   }, [player, state.song, state.loadId]);
+
+  useEffect(() => {
+    if (player) player.editMode = state.editMode;
+  }, [player, state.editMode]);
 
   // SoundFont: load the user's file when chosen, the built-in one when cleared.
   useEffect(() => {
@@ -73,6 +86,7 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
   useEffect(() => {
     if (!player) return;
     player.setSpeed(state.practice.speed);
+    backingRef.current?.setSpeed(state.practice.speed);
     player.setMetronome(state.practice.metronome);
     player.setCountIn(state.practice.countIn);
     player.setLooping(state.practice.loop);
@@ -81,6 +95,8 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
+      const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+      if (!typing && e.key !== ' ' && editorKey(store, player, e)) { e.preventDefault(); return; }
       if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); store.undo(); }
       else if (e.ctrlKey && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); store.redo(); }
       else if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); void store.save(e.shiftKey); }
@@ -112,6 +128,7 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
           <button onClick={() => store.clearInfo()}>OK</button>
         </div>
       )}
+      {state.busy && <div className="banner info" data-testid="busy"><span>{state.busy}</span></div>}
       {state.error && (
         <div className="banner error">
           <span>{state.error}</span>
@@ -121,7 +138,16 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
       <header className="toolbar">
         <div className="brand">music<b>Genie</b></div>
         <div className="group">
-          <button onClick={() => store.openDialog()} title="Open (Ctrl+O)">Open…</button>
+          <div className="menu-wrap">
+            <button onClick={() => setNewMenu(!newMenu)} title="Start a new song">New ▾</button>
+            {newMenu && (
+              <div className="menu left" onMouseLeave={() => setNewMenu(false)}>
+                <button onClick={() => { setNewMenu(false); store.newSong('guitar'); }}>Guitar song (6 strings, tab + notation)</button>
+                <button onClick={() => { setNewMenu(false); store.newSong('bass'); }}>Bass song (4 strings, tab)</button>
+              </div>
+            )}
+          </div>
+          <button onClick={() => store.openDialog()} title="Open (Ctrl+O): MusicXML, Guitar Pro, MIDI, Rocksmith .psarc / .rs2dlc / .xml, .mgproj">Open…</button>
           <button onClick={() => store.save()} disabled={!song} title="Save (Ctrl+S)">Save</button>
           <button onClick={() => store.save(true)} disabled={!song}>Save As…</button>
         </div>
@@ -163,11 +189,19 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
           <span className="val" data-testid="transpose-total">{state.transposeTotal > 0 ? '+' : ''}{state.transposeTotal}</span>
           <button disabled={!song} onClick={() => store.transpose(1)}>+</button>
         </div>
+        <div className="group">
+          <button className={state.editMode ? 'chip' : ''} disabled={!song} data-testid="edit-toggle"
+            title="Edit notes: click a beat, type frets (tab) or A-G (notation)" onClick={() => store.setEditMode(!state.editMode)}>✎ Edit</button>
+          <button disabled={!song} data-testid="rs-open" title="Export guitar/bass parts as a Rocksmith 2014 song" onClick={() => store.openRsExport(true)}>⇪ Rocksmith…</button>
+        </div>
         <div className="group right">
           <button className={showBand ? 'chip' : ''} disabled={!song} onClick={() => setShowBand(!showBand)} title="Chords, sections and the virtual band">🎸 Band</button>
           <SettingsMenu state={state} store={store} soundFont={status?.soundFont ?? DEFAULT_SOUNDFONT} />
         </div>
       </header>
+      <EditBar state={state} store={store} player={player} />
+      <TuningDialog state={state} store={store} />
+      <RocksmithDialog state={state} store={store} player={player} />
       <div className="main">
         <aside className="tracks">
           <div className="tracks-head">
@@ -175,15 +209,17 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
             {song && <div className="sub">{song.bars.length} bars · {song.tracks.length} tracks · {song.tempos[0]?.bpm} bpm{state.dirty ? ' · unsaved' : ''}</div>}
           </div>
           {song?.tracks.map((t) => <TrackRow key={t.id} track={t} store={store} />)}
+          {song && <BackingRow song={song} store={store} />}
           {!song && (
             <div className="empty">
-              Open a MusicXML, Guitar Pro (3-7), MIDI or .mgproj file to begin.
+              Open a MusicXML, Guitar Pro (3-7), MIDI, Rocksmith (.psarc) or .mgproj file, or start a new guitar or bass song.
               <button className="primary" onClick={() => store.openDialog()}>Open a file…</button>
             </div>
           )}
         </aside>
         <section className="score" ref={scrollRef}>
           <div ref={hostRef} className="at-host" />
+          <CursorOverlay state={state} player={player} status={status} />
           <ChordPickerPopover state={state} store={store} />
         </section>
         {showBand && song && <BandPanel state={state} store={store} status={status} />}
@@ -233,6 +269,7 @@ function TrackRow({ track: t, store }: { track: Track; store: Store }) {
           <option value="both">Both</option>
         </select>
       </div>
+      <TuningControls track={t} store={store} />
       <div className="row3">
         <label title="Volume">Vol
           <input type="range" min={0} max={1} step={0.05} value={t.mixer.volume}

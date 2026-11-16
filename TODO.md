@@ -103,10 +103,70 @@ Dan's check list for Round 2 (fill in what you find):
   no note editing yet (Round 3/4); swing moves off-beat 8ths only; band parts never
   cross barlines; lead = the top line of the play-along track.
 
-## Current Objective: Round 3, "tab editing + Rocksmith"
-Goal: edit guitar/bass parts note by note on the tab, open any Rocksmith
-2014 custom song (.psarc) as tabs with its audio, and export any guitar or
-bass part as a .psarc that plays in Rocksmith.
+### Round 3, "tab editing + Rocksmith" (2026-11-16): DONE except the Wwise step (Wwise not installed)
+Checks ran in the packaged app (`npm run e2e:r3`), hidden (off-screen, never shown or
+focusable) and `--mute`; speaker level measured 0 on every playing step (techniques
+playback pre 0.14, backing track pre 0.66, offline render 0). **No sound checks this round.**
+Unit tests 107/107 (`npm test`). Rounds 1-2 app checks re-run on the 0.3.0 exe: all pass.
+Screenshots: `test-results/r3-*.png`; report `test-results/report-round3.json`.
+1. Note editing: **done.** Edit mode (✎ Edit, or New ▸ Guitar/Bass song): click a beat; tab =
+   fret digits (two quick digits = 10-24), ↑↓ strings; notation = A-G (Shift adds to chord),
+   ↑↓ pitch; whole-64th, dot, triplet, tie, rest, insert/delete beat and bar, copy/paste
+   (beat or selected bars); undoable; generated tracks show "edited". Check: 16-note bass riff
+   typed with keys matched exactly (`r3-1-bass-riff.png`); unit tests per edit, bars stay full.
+2. Techniques: **done.** Palette + keys for hammer-on/pull-off, slide (shift/legato/out up/down),
+   bend (½, full, 1½, bend+release), vibrato, palm mute, fret mute, harmonic, pinch, tap, slap,
+   pop, accent, tremolo. Check: all 20 drawn on a tab (`r3-2-techniques.png`), played (muted),
+   save -> reopen identical.
+3. Tunings and capo: **done.** Presets (14 guitar, 6 bass) + custom dialog; keep the sound
+   (frets re-placed) or keep the frets; capo 0-12. Check: E-G-A riff -> Drop D keep-pitch frets
+   2/5/7, keep-frets pitches D/F/G (`r3-3-drop-d.png`); unit tests.
+4. .NET helper: **done.** `helpers/rocksmith/MgRocksmith` (F#, net8.0) over Rocksmith2014.NET
+   v3.5.0 (MIT, submodule); JSON lines over stdin/stdout; read, readProject, readXml, list, write,
+   check, findWwise, findRocksmith. Check: lists the reference file's 18 entries.
+5. .psarc import: **done.** File > Open takes .psarc, DLC Builder .rs2dlc and arrangement .xml.
+   Check: reference bass imports with 541 notes = hardest levels (541) = the file's source XML
+   (541); 108 bars, sections, tuning; song audio plays as a "Song audio" row (vol, mute, start
+   offset): pre-gain 0.66, speakers 0, **16 ms off the cursor at 30 s** (`r3-5-*.png`).
+6. Audio for export: **done.** alphaTab offline render (~105x real time, silent) or a loaded
+   recording (WAV/MP3/OGG/FLAC + offset). Check: Ode Rock mix WAV 38 401 ms vs song 38 400 ms
+   (1 ms); "without the exported parts" also renders.
+7. Rocksmith export: **done up to Wwise; Wwise step not done (not installed).** Dialog: parts +
+   Lead/Rhythm/Bass/Bonus, title/artist/album/year/art, preview start, audio choice, copy to
+   `E:\Rocksmith2014\dlc`; writes notes, chords + fingerings, techniques, beats, sections,
+   COUNT/END phrases, anchors; DD generated (14/14/11 levels). Check: Ode Rock bass, rhythm and
+   lead: **arrangement checks 0 issues**; stopped at Wwise and kept XML, WAV, preview, cover and
+   `.rs2dlc` (`r3-7-*.png`). Refuses non-guitar/bass and wrong string counts with a message.
+8. Round trip: **done (via the .rs2dlc, since no .psarc can be built without Wwise).**
+   Check: reopened export, 121/365/62 notes, **0 differences** in pitch/string/fret/techniques,
+   same sections and tunings (plus 1 lead-in and 1 tail bar, by design). Reference bass
+   import -> export: 541 notes out, 541 in the written XML, 0 check issues.
+
+Dan's check list for Round 3:
+- Run `dist\musicGenie-0.3.0-portable.exe` (or `npm run dev`). New ▸ Bass song: click a beat,
+  type frets (1 then 2 quickly = 12), ←→ beats, ↑↓ strings, `]`/`[` shorter/longer, `.` dot;
+  try the technique buttons (or H, S, B, V, M, X, N, T...). Ctrl+Z undoes each step.
+- A guitar track's row has Tuning and Capo: pick Drop D; "…" opens custom tuning with
+  "keep the sound" / "keep the frets".
+- Open `TestData\private\Husker-Du_Could-You-Be-The-One_v1_p.psarc`: the bass tab should play
+  along with the song audio ("Song audio" row: volume, mute, start offset).
+- **Wwise is needed to finish a Rocksmith song.** Only the Wwise Launcher is installed. In the
+  Wwise Launcher (signed in with your Audiokinetic account) install **Wwise 2021.1.x** (or
+  2023.1.x; 2019/2021/2022/2023 work), "Authoring" only; it goes to
+  `C:\Program Files (x86)\Audiokinetic\Wwise 2021.1.x`. musicGenie finds it by itself.
+- **Loading the exported song in Rocksmith 2014:** load a song with guitar/bass parts (or the
+  Ode to Joy Rock band), ⇪ Rocksmith…, tick the parts, tick "Copy into E:\Rocksmith2014\dlc",
+  Export. That writes `Documents\musicGenie\Rocksmith\<Artist>_<Title>\<Artist>_<Title>_v1_p.psarc`
+  and copies it into `E:\Rocksmith2014\dlc` (or copy it there yourself). Custom songs need the
+  CDLC patch: your `E:\Rocksmith2014` already has `D3DX9_42.dll` (the CDLC enabler). Start
+  Rocksmith 2014 > Learn a Song > search the title or artist. Without Wwise: open the `.rs2dlc`
+  from the same folder in DLC Builder and press Build > Release (it converts the audio).
+- Known limits: the export has not been tried in the game yet (no .psarc without Wwise);
+  the tone is DLC Builder's default per arrangement; imports quantise to 32nd notes (no
+  triplets); a Rocksmith import's tempo changes every beat (only big changes are drawn);
+  the exported song gets a ~2 s count-in bar and a 1-bar ending.
+
+<details><summary>Round 3 plan (as given)</summary>
 
 Facts for this round:
 - Dan installed Audiokinetic Wwise on 2026-11-16 (version not recorded; find
@@ -180,9 +240,10 @@ Facts for this round:
    techniques, sections and tuning match what was exported (unit/e2e test).
    Also export the reference file's bass after import and compare note counts.
    Check: test passes; list any differences in the report.
+</details>
 
-### For Dan to check (fill in at end of round)
-- Include exactly how to load the exported song in Rocksmith 2014.
+## Current Objective
+Round 3 is done (see above). Wait for Dan's Round 3 check before starting Round 4.
 
 ## Next Steps (Do Not Start Yet)
 - **Round 4: composition.** Piano roll, chord
@@ -196,6 +257,10 @@ Facts for this round:
   stem splitting (Demucs). Plug these in from existing tools, don't build them.
 
 ## Technical Notes / Blockers
+- **Blocker (Round 3, item 7): no Wwise version installed** (only Wwise Launcher 2026.2.0),
+  so the export cannot make .wem audio or a .psarc yet; it stops there and keeps a DLC
+  Builder project. Install Wwise 2021.1.x or 2023.1.x through the launcher, then re-run
+  `npm run e2e:r3 -- --only=7,8` to check the full .psarc build and its round trip.
 - Reference Rocksmith file examined 2026-11-16 (Hüsker Dü, "Could You Be The
   One", bass): the .psarc holds the arrangement XML (song version 7: notes
   with time/string/fret/techniques, phrases, sections, 7 difficulty levels),

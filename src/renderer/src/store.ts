@@ -2,11 +2,38 @@
 // All edits go through `edit()` so they are undoable and mark the project dirty.
 import { importFile } from '../../import';
 import {
-  applyDetectedChords, defaultBand, detectChords, editedGeneratedTracks, generateBand, harmonySourceTracks, History,
-  parseProject, regenerate, removeSection, ROLE_NAMES, serializeProject, setChordSymbol, setDisplay, setInstrument,
-  setMixer, setPlayback, setSection, splitTrack, transpose, withStyle,
-  type BandRole, type BandSettings, type DisplayMode, type Mixer, type Song, type StyleId,
+  applyDetectedChords, clampCursor, defaultBand, detectChords, editedGeneratedTracks, generateBand, harmonySourceTracks,
+  History, newSong, parseProject, regenerate, removeSection, ROLE_NAMES, serializeProject, setBacking, setCapo,
+  setChordSymbol, setDisplay, setInstrument, setMixer, setPlayback, setRocksmithExport, setSection, setTuning,
+  songFromRocksmith, splitTrack, transpose, withStyle,
+  type BackingTrack, type BandRole, type BandSettings, type Clip, type Cursor, type DisplayMode, type Mixer,
+  type RocksmithExport, type RsImportReport, type RsReadResult, type Song, type StyleId,
 } from '../../model';
+import type { RsExportResult } from './rocksmithExport';
+
+type RsArr = RsReadResult['arrangements'][0];
+
+/** What the last Rocksmith import found (for the status line and tests). */
+export interface RsImportSummary {
+  file: string;
+  arrangements: { name: string; levels?: number; hardest?: RsArr['hardest']; sourceXmlHardest?: RsArr['sourceXmlHardest']; notes: number; chords: number }[];
+  report: RsImportReport;
+  audio: string | null;
+}
+
+export interface RsExportState {
+  open: boolean;
+  running: boolean;
+  step: string | null;
+  result: RsExportResult | null;
+  error: string | null;
+}
+
+/** A Rocksmith arrangement XML (root <song>) rather than MusicXML. */
+export function isRocksmithXml(bytes: Uint8Array): boolean {
+  const head = new TextDecoder().decode(bytes.subarray(0, 2048));
+  return /<song[\s>]/.test(head) && !/score-(partwise|timewise)/.test(head);
+}
 
 /** Next seed for "Try another" / Regenerate: deterministic sequence, never 0. */
 export function nextSeed(seed: number): number {
@@ -53,6 +80,16 @@ export interface AppState {
   /** User SoundFont path to use, or null for the bundled default. */
   soundFontPath: string | null;
   info: string | null;
+  /** Note editing: clicks select beats, keys type notes. */
+  editMode: boolean;
+  cursor: Cursor | null;
+  hasClip: boolean;
+  /** Busy message while a long job (Rocksmith import) runs. */
+  busy: string | null;
+  rsImport: RsImportSummary | null;
+  rsExport: RsExportState;
+  /** Track whose custom-tuning dialog is open. */
+  tuningTrack: string | null;
 }
 
 type Listener = (s: AppState) => void;
@@ -66,7 +103,12 @@ export class Store {
     practice: { speed: 100, metronome: false, countIn: false, loop: false },
     error: null, recovery: null, lastAutosave: null, transposeTotal: 0, loadId: 0,
     band: null, confirm: null, chordPicker: null, soundFontPath: null, info: null,
+    editMode: false, cursor: null, hasClip: false, busy: null, rsImport: null,
+    rsExport: { open: false, running: false, step: null, result: null, error: null }, tuningTrack: null,
   };
+  private clip: Clip | null = null;
+  /** Tests only: export into this folder instead of Documents\musicGenie\Rocksmith. */
+  exportDirOverride: string | null = null;
   private confirmYes: (() => void) | null = null;
 
   on(fn: Listener): () => void {
@@ -93,7 +135,8 @@ export class Store {
     const band = song.band ? structuredClone(song.band) : defaultBand('rock', harmonySourceTracks(song)[0]?.id, 1);
     this.set({
       song, filePath, fileName, dirty: false, error: null, transposeTotal: 0, loadId: this.state.loadId + 1,
-      band, confirm: null, chordPicker: null, info: null,
+      band, confirm: null, chordPicker: null, info: null, cursor: null, rsImport: null, tuningTrack: null,
+      rsExport: { open: false, running: false, step: null, result: null, error: null },
     });
     const sf = song.playback?.soundFont;
     if (sf) {
@@ -115,8 +158,49 @@ export class Store {
   }
 
   async openPath(path: string) {
+    const ext = path.toLowerCase().split('.').pop() ?? '';
+    if (ext === 'psarc' || ext === 'rs2dlc') return this.openRocksmith(path);
     const f = await window.mg.readFile(path);
+    if (ext === 'xml' && isRocksmithXml(f.bytes)) return this.openRocksmith(path);
     this.openBytes(f.name, f.path, f.bytes);
+  }
+
+  /** Open a Rocksmith .psarc, a DLC Builder .rs2dlc project or a Rocksmith arrangement .xml. */
+  async openRocksmith(path: string) {
+    const name = path.split(/[\\/]/).pop() ?? path;
+    const ext = name.toLowerCase().split('.').pop();
+    this.set({ busy: 'Opening ' + name + '…', error: null });
+    const off = window.mg.onRsProgress((m) => this.set({ busy: 'Opening ' + name + ': ' + m + '…' }));
+    try {
+      const { userData } = await window.mg.paths();
+      const folder = name.replace(/\.[^.]+$/, '').replace(/[^\w.-]+/g, '_');
+      const outDir = userData + '\\rocksmith-import\\' + folder;
+      const cmd = ext === 'psarc' ? 'read' : ext === 'rs2dlc' ? 'readProject' : 'readXml';
+      const r = await window.mg.rs<RsReadResult>(cmd, { psarc: path, rs2dlc: path, xml: path, outDir });
+      const { song, report } = songFromRocksmith(r);
+      this.load(song, null, name);
+      this.set({
+        rsImport: {
+          file: path,
+          arrangements: r.arrangements.map((a) => ({
+            name: a.name, levels: a.levels, hardest: a.hardest, sourceXmlHardest: a.sourceXmlHardest,
+            notes: a.notes.length, chords: a.chords.length,
+          })),
+          report,
+          audio: song.backing?.path ?? null,
+        },
+      });
+    } catch (e) {
+      this.set({ error: 'Could not open ' + name + ': ' + (e as Error).message });
+    } finally {
+      off();
+      this.set({ busy: null });
+    }
+  }
+
+  newSong(kind: 'guitar' | 'bass') {
+    this.load(newSong(kind), null, kind === 'bass' ? 'New bass song' : 'New guitar song');
+    this.set({ editMode: true, cursor: { track: 0, staff: 0, bar: 0, voice: 0, beat: 0, string: 1 } });
   }
 
   async openDialog() {
@@ -303,6 +387,71 @@ export class Store {
 
   setPractice(p: Partial<Practice>) {
     this.set({ practice: { ...this.state.practice, ...p } });
+  }
+
+  // ----- note editing -----
+  setEditMode(on: boolean) {
+    const song = this.state.song;
+    let cursor = this.state.cursor;
+    if (on && song && !cursor) {
+      const ti = Math.max(0, song.tracks.findIndex((t) => t.display.visible));
+      cursor = clampCursor(song, { track: ti, staff: 0, bar: 0, voice: 0, beat: 0, string: 1 });
+    }
+    this.set({ editMode: on, cursor });
+  }
+  setCursor(c: Cursor | null) {
+    const song = this.state.song;
+    this.set({ cursor: c && song ? clampCursor(song, c) : null });
+  }
+  /** Run a cursor edit as one undoable step; keeps the cursor inside the song. */
+  editAt(fn: (s: Song, c: Cursor) => Song, label: string, moveTo?: (s: Song, c: Cursor) => Cursor) {
+    const c = this.state.cursor;
+    if (!c || !this.state.song) return;
+    try {
+      this.edit((s) => fn(s, c), label);
+      const s = this.state.song!;
+      this.set({ cursor: clampCursor(s, moveTo ? moveTo(s, c) : c) });
+    } catch (e) {
+      this.set({ error: (e as Error).message });
+    }
+  }
+  setClip(clip: Clip | null) {
+    this.clip = clip;
+    this.set({ hasClip: !!clip });
+  }
+  getClip() {
+    return this.clip;
+  }
+
+  // ----- tunings -----
+  setTuning(trackId: string, tuning: number[], mode: 'keepPitch' | 'keepFrets') {
+    try {
+      this.edit((s) => setTuning(s, trackId, tuning, mode), 'Tuning');
+    } catch (e) {
+      this.set({ error: (e as Error).message });
+    }
+  }
+  setCapo(trackId: string, capo: number) {
+    this.edit((s) => setCapo(s, trackId, capo), capo ? 'Capo ' + capo : 'No capo');
+  }
+  openTuningDialog(trackId: string | null) {
+    this.set({ tuningTrack: trackId });
+  }
+
+  // ----- backing track -----
+  setBacking(patch: Partial<BackingTrack> | null) {
+    this.edit((s) => setBacking(s, patch), patch === null ? 'Remove recording' : 'Recording settings');
+  }
+
+  // ----- Rocksmith export -----
+  openRsExport(open: boolean) {
+    this.set({ rsExport: { ...this.state.rsExport, open } });
+  }
+  saveRsSettings(s: RocksmithExport) {
+    if (JSON.stringify(this.state.song?.rocksmith) !== JSON.stringify(s)) this.edit((x) => setRocksmithExport(x, s), 'Rocksmith export settings');
+  }
+  setRsExport(p: Partial<RsExportState>) {
+    this.set({ rsExport: { ...this.state.rsExport, ...p } });
   }
 
   // ----- autosave / recovery -----

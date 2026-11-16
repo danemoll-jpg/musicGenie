@@ -1,7 +1,7 @@
 {
   "name": "musicgenie",
   "productName": "musicGenie",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Desktop music studio: import, arrange, play, and (later) export to Rocksmith 2014",
   "author": "Dan Moll",
   "license": "UNLICENSED",
@@ -17,7 +17,10 @@
     "e2e": "node tests/e2e/run.mjs",
     "e2e:dev": "node tests/e2e/run.mjs --dev",
     "e2e:r2": "node tests/e2e/round2.mjs",
-    "e2e:r2:dev": "node tests/e2e/round2.mjs --dev"
+    "e2e:r2:dev": "node tests/e2e/round2.mjs --dev",
+    "helper": "dotnet publish helpers/rocksmith/MgRocksmith/MgRocksmith.fsproj -c Release -o helpers/rocksmith/bin --nologo -v q -p:NuGetAudit=false",
+    "e2e:r3": "node tests/e2e/round3.mjs",
+    "e2e:r3:dev": "node tests/e2e/round3.mjs --dev"
   },
   "dependencies": {
     "@coderline/alphatab": "1.9.0",
@@ -59,6 +62,16 @@
     },
     "portable": {
       "artifactName": "musicGenie-${version}-portable.exe"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "helpers/rocksmith/bin",
+        "to": "rocksmith",
+        "filter": [
+          "**/*",
+          "!*.pdb"
+        ]
+      }
+    ]
   }
 }

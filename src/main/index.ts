@@ -6,9 +6,10 @@
 //   --profile-dir=DIR  use DIR for app data (tests use a throwaway folder).
 //   --autosave-ms=N    autosave interval (default 120000 = 2 minutes).
 //   --open=FILE        open FILE on start-up.
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, join, normalize } from 'node:path';
+import { basename, dirname, join, normalize } from 'node:path';
+import { RocksmithHelper } from './rocksmithHelper';
 import { pathToFileURL } from 'node:url';
 
 function flagValue(name: string): string | undefined {
@@ -37,6 +38,10 @@ const rendererDir = join(__dirname, '..', 'renderer');
 interface AppSettings {
   /** User SoundFont path, or null for the bundled default. */
   soundFont: string | null;
+  /** Rocksmith 2014 dlc folder chosen by the user (null = use the one found automatically). */
+  rocksmithDlc?: string | null;
+  /** Charter name written into exported Rocksmith songs. */
+  author?: string | null;
 }
 const settingsFile = () => join(app.getPath('userData'), 'settings.json');
 function readSettings(): AppSettings {
@@ -128,7 +133,8 @@ ipcMain.handle('open-dialog', async () => {
   const r = await dialog.showOpenDialog(win!, {
     properties: ['openFile'],
     filters: [
-      { name: 'Music files', extensions: ['mgproj', 'musicxml', 'xml', 'mxl', 'gp', 'gp3', 'gp4', 'gp5', 'gpx', 'mid', 'midi'] },
+      { name: 'Music files', extensions: ['mgproj', 'musicxml', 'xml', 'mxl', 'gp', 'gp3', 'gp4', 'gp5', 'gpx', 'mid', 'midi', 'psarc', 'rs2dlc'] },
+      { name: 'Rocksmith 2014 (.psarc, DLC Builder .rs2dlc, arrangement .xml)', extensions: ['psarc', 'rs2dlc', 'xml'] },
       { name: 'All files', extensions: ['*'] },
     ],
   });
@@ -192,6 +198,34 @@ ipcMain.handle('recovery-dismiss', () => {
   recoveryOffer = null;
 });
 
+// ---------- Rocksmith helper + files ----------
+const rocksmith = new RocksmithHelper((msg) => win?.webContents.send('rs-progress', msg));
+ipcMain.handle('rs', (_e, cmd: string, args: unknown) => rocksmith.request(cmd, args));
+
+ipcMain.handle('write-bytes', (_e, path: string, bytes: Uint8Array) => {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, bytes);
+  return path;
+});
+
+ipcMain.handle('pick-file', async (_e, opts: { title: string; filters: { name: string; extensions: string[] }[] }) => {
+  const r = await dialog.showOpenDialog(win!, { title: opts.title, properties: ['openFile'], filters: opts.filters });
+  return r.canceled ? null : r.filePaths[0];
+});
+
+ipcMain.handle('pick-folder', async (_e, title: string) => {
+  const r = await dialog.showOpenDialog(win!, { title, properties: ['openDirectory'] });
+  return r.canceled ? null : r.filePaths[0];
+});
+
+ipcMain.handle('paths', () => ({
+  userData: app.getPath('userData'),
+  documents: app.getPath('documents'),
+  temp: app.getPath('temp'),
+}));
+
+ipcMain.handle('reveal', (_e, path: string) => shell.showItemInFolder(path));
+
 /** PNG of the window (works while hidden; never shows or focuses it). */
 ipcMain.handle('capture', async () => {
   const img = await win!.webContents.capturePage();
@@ -215,5 +249,8 @@ app.on('window-all-closed', () => {
   cleanExit();
   app.quit();
 });
-app.on('before-quit', cleanExit);
+app.on('before-quit', () => {
+  rocksmith.stop();
+  cleanExit();
+});
 

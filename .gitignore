@@ -8,3 +8,8 @@ test-results/
 src/renderer/public/font/
 src/renderer/public/soundfont/
 TestData/private/
+
+# .NET Rocksmith helper build output (npm run helper)
+helpers/rocksmith/bin/
+helpers/rocksmith/MgRocksmith/bin/
+helpers/rocksmith/MgRocksmith/obj/

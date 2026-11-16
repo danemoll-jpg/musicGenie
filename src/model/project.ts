@@ -1,8 +1,10 @@
 // .mgproj project files: JSON with a schemaVersion.
 import type { Song } from './types';
 
-// v2 (Round 2): song.playback, song.band, track.generated, track.derived, chordSymbols[].source. v1 files load as-is.
-export const SCHEMA_VERSION = 2;
+// v2 (Round 2): song.playback, song.band, track.generated, track.derived, chordSymbols[].source.
+// v3 (Round 3): song.backing, song.rocksmith, track.rocksmith, techniques.tremolo/slideToFret.
+// Older files load as-is (every v3 addition is optional).
+export const SCHEMA_VERSION = 3;
 
 export interface ProjectFile {
   schemaVersion: number;

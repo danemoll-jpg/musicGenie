@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- musicGenie's Rocksmith 2014 helper: a console app over iminashi's Rocksmith2014.NET
+       libraries (MIT, git submodule pinned to v3.5.0 in ../Rocksmith2014.NET).
+       Talks to Electron as JSON lines on stdin/stdout (see Program.fs). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AssemblyName>MgRocksmith</AssemblyName>
+    <Nullable>disable</Nullable>
+    <WarningLevel>3</WarningLevel>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Json.fs" />
+    <Compile Include="ArrangementJson.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DLC Builder's default tones (used when an arrangement has no tone of its own). -->
+    <Content Include="..\Rocksmith2014.NET\samples\DLCBuilder.Domain\Tones\default_lead.json" Link="tones\default_lead.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Rocksmith2014.NET\samples\DLCBuilder.Domain\Tones\default_rhythm.json" Link="tones\default_rhythm.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- ww2ogg/revorb (wem -> ogg). The library only copies them when ITS RuntimeIdentifier is win-x64. -->
+    <Content Include="..\Rocksmith2014.NET\src\Rocksmith2014.Audio\Tools\win\ww2ogg.exe" Link="Tools\ww2ogg.exe" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Rocksmith2014.NET\src\Rocksmith2014.Audio\Tools\win\revorb.exe" Link="Tools\revorb.exe" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Rocksmith2014.NET\samples\DLCBuilder.Domain\Tones\default_bass.json" Link="tones\default_bass.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rocksmith2014.NET\src\Rocksmith2014.DLCProject\Rocksmith2014.DLCProject.fsproj" />
+    <ProjectReference Include="..\Rocksmith2014.NET\src\Rocksmith2014.Audio\Rocksmith2014.Audio.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="8.0.401" />
+    <!-- The library asks for Magick.NET 14.7.0, which has published security advisories: use the patched 14.x. -->
+    <PackageReference Include="Magick.NET-Q8-x64" Version="14.17.2" />
+  </ItemGroup>
+
+</Project>

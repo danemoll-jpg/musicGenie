@@ -1,7 +1,7 @@
 // Pure model edits: each takes a Song and returns a NEW Song (the input is never mutated).
 import { assignChord } from './fretting';
 import { findInstrument, toInstrumentRef } from './instruments';
-import type { DisplayMode, Mixer, Note, Song, Track } from './types';
+import type { BackingTrack, DisplayMode, Mixer, Note, RocksmithExport, Song, Track } from './types';
 
 export function cloneSong(song: Song): Song {
   return structuredClone(song);
@@ -161,5 +161,21 @@ export function setPlayback(song: Song, patch: { swing?: number; soundFont?: str
   if (patch.soundFont === null) delete pb.soundFont;
   else if (patch.soundFont !== undefined) pb.soundFont = patch.soundFont;
   next.playback = pb;
+  return next;
+}
+
+/** Change the backing track (volume, mute, offset), or remove it with null. */
+export function setBacking(song: Song, patch: Partial<BackingTrack> | null): Song {
+  const next = cloneSong(song);
+  if (patch === null) delete next.backing;
+  else if (next.backing) Object.assign(next.backing, patch);
+  else if (patch.path) next.backing = { name: 'Recording', offsetMs: 0, volume: 0.8, mute: false, ...patch, path: patch.path };
+  return next;
+}
+
+/** Remember the Rocksmith export settings in the song. */
+export function setRocksmithExport(song: Song, s: RocksmithExport): Song {
+  const next = cloneSong(song);
+  next.rocksmith = structuredClone(s);
   return next;
 }

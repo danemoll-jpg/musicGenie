@@ -1,7 +1,7 @@
 // Song sections (Intro, Verse, Chorus...): each is a name at a start bar and runs to the next one.
 import type { Song } from './types';
 
-export const SECTION_NAMES = ['Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Bridge', 'Solo', 'Outro'];
+export const SECTION_NAMES = ['Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Bridge', 'Solo', 'Riff', 'Breakdown', 'Interlude', 'Outro', 'No guitar'];
 
 export interface SectionRange {
   name: string;

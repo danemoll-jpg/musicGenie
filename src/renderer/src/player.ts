@@ -24,6 +24,19 @@ export interface PlayerStatus {
 
 type Listener = (s: PlayerStatus) => void;
 
+/** A clicked beat in model terms (alphaTab indices match the model's: one alphaTab beat per model beat). */
+export interface BeatHit {
+  track: number;
+  staff: number;
+  bar: number;
+  voice: number;
+  beat: number;
+  /** String of the clicked note, if a note was hit. */
+  string?: number;
+}
+
+export interface Rect { x: number; y: number; w: number; h: number }
+
 function stripMixer(song: Song): string {
   return JSON.stringify({ ...song, tracks: song.tracks.map((t) => ({ ...t, mixer: null })) });
 }
@@ -43,6 +56,10 @@ export class ScorePlayer {
   private swing = 0;
   private readonly defaultSoundFontUrl: string;
   private renderWaiters: (() => void)[] = [];
+  /** Edit mode: a click selects the beat instead of playing from it. */
+  editMode = false;
+  onBeatClick: ((hit: BeatHit) => void) | null = null;
+  private lastDown = { x: 0, y: 0 };
   private pendingScore: alphaTab.model.Score | null = null;
 
   private flushRenderWaiters() {
@@ -105,8 +122,21 @@ export class ScorePlayer {
     });
     // Click a single beat (no drag) -> play from there.
     let downBeat: alphaTab.model.Beat | null = null;
+    host.addEventListener('mousedown', (e) => {
+      const r = host.getBoundingClientRect();
+      this.lastDown = { x: e.clientX - r.left, y: e.clientY - r.top };
+    }, true);
     a.beatMouseDown.on((b) => (downBeat = b));
     a.beatMouseUp.on((b) => {
+      if (this.editMode && b && downBeat && b === downBeat) {
+        downBeat = null;
+        const note = a.boundsLookup?.getNoteAtPos(b, this.lastDown.x, this.lastDown.y) ?? null;
+        this.onBeatClick?.({
+          track: b.voice.bar.staff.track.index, staff: b.voice.bar.staff.index, bar: b.voice.bar.index,
+          voice: b.voice.index, beat: b.index, string: note?.string,
+        });
+        return;
+      }
       if (b && downBeat && b === downBeat && this.status.ready) {
         a.tickPosition = b.absolutePlaybackStart;
         if (!this.status.playing) a.play();
@@ -295,6 +325,23 @@ export class ScorePlayer {
     if (!sys) return -1;
     const mb = sys.bars.find((b) => x >= b.realBounds.x && x < b.realBounds.x + b.realBounds.w);
     return mb ? mb.index : -1;
+  }
+
+  /** Where a model beat (and the note on `string`) is drawn, in host pixels. */
+  beatRects(c: { track: number; staff: number; bar: number; voice: number; beat: number; string: number }): { beat: Rect; note: Rect | null; bar: Rect } | null {
+    const voice = this.api.score?.tracks[c.track]?.staves[c.staff]?.bars[c.bar]?.voices[c.voice];
+    if (!voice?.beats.length) return null;
+    const beat = voice.beats[Math.min(c.beat, voice.beats.length - 1)];
+    const bb = this.api.boundsLookup?.findBeat(beat);
+    if (!bb) return null;
+    const vb = bb.visualBounds;
+    const barB = bb.barBounds.visualBounds; // this staff only (not the whole system)
+    const nb = bb.notes?.find((n) => n.note.string === c.string)?.noteHeadBounds ?? null;
+    return {
+      beat: { x: vb.x, y: barB.y, w: Math.max(8, vb.w), h: barB.h },
+      note: nb ? { x: nb.x, y: nb.y, w: nb.w, h: nb.h } : null,
+      bar: { x: barB.x, y: barB.y, w: barB.w, h: barB.h },
+    };
   }
 
   clearRange() {

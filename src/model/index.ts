@@ -11,3 +11,7 @@ export * from './chords';
 export * from './split';
 export * from './sections';
 export * from './band';
+export * from './noteEdit';
+export * from './tunings';
+export * from './tempo';
+export * from './rocksmith';
