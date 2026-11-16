@@ -20,6 +20,10 @@ const api = {
   recoveryOffer: (): Promise<{ savedAt: string; json: string } | null> => ipcRenderer.invoke('recovery-offer'),
   recoveryDismiss: (): Promise<void> => ipcRenderer.invoke('recovery-dismiss'),
   capture: (): Promise<Uint8Array> => ipcRenderer.invoke('capture'),
+  settingsGet: (): Promise<{ soundFont: string | null }> => ipcRenderer.invoke('settings-get'),
+  settingsSet: (patch: { soundFont?: string | null }): Promise<{ soundFont: string | null }> => ipcRenderer.invoke('settings-set', patch),
+  fileExists: (path: string): Promise<boolean> => ipcRenderer.invoke('file-exists', path),
+  pickSoundFont: (): Promise<string | null> => ipcRenderer.invoke('pick-soundfont'),
 };
 
 export type MgApi = typeof api;

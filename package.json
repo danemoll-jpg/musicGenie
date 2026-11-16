@@ -1,7 +1,7 @@
 {
   "name": "musicgenie",
   "productName": "musicGenie",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Desktop music studio: import, arrange, play, and (later) export to Rocksmith 2014",
   "author": "Dan Moll",
   "license": "UNLICENSED",
@@ -15,7 +15,9 @@
     "dist": "electron-vite build && electron-builder --win",
     "dist:dir": "electron-vite build && electron-builder --win dir",
     "e2e": "node tests/e2e/run.mjs",
-    "e2e:dev": "node tests/e2e/run.mjs --dev"
+    "e2e:dev": "node tests/e2e/run.mjs --dev",
+    "e2e:r2": "node tests/e2e/round2.mjs",
+    "e2e:r2:dev": "node tests/e2e/round2.mjs --dev"
   },
   "dependencies": {
     "@coderline/alphatab": "1.9.0",

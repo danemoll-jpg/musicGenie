@@ -2,7 +2,10 @@
 // except as read-only lookups.
 import * as alphaTab from '@coderline/alphatab';
 import type { Song } from '../../model/types';
+import { applySwing } from '../../render/swing';
 import { toAlphaTabScore } from '../../render/toAlphaTab';
+
+export const DEFAULT_SOUNDFONT = 'GeneralUser GS 2.0.3';
 
 export interface PlayerStatus {
   ready: boolean;
@@ -13,6 +16,10 @@ export interface PlayerStatus {
   looping: boolean;
   range: { startBar: number; endBar: number } | null;
   renderCount: number;
+  /** Name of the loaded SoundFont and how many SoundFont loads finished. */
+  soundFont: string;
+  soundFontLoads: number;
+  swing: number;
 }
 
 type Listener = (s: PlayerStatus) => void;
@@ -31,7 +38,10 @@ export class ScorePlayer {
   private resumeAfterLoad: { tick: number; play: boolean } | null = null;
   status: PlayerStatus = {
     ready: false, playing: false, currentBar: 0, tick: 0, endTick: 0, looping: false, range: null, renderCount: 0,
+    soundFont: DEFAULT_SOUNDFONT, soundFontLoads: 0, swing: 0,
   };
+  private swing = 0;
+  private readonly defaultSoundFontUrl: string;
   private renderWaiters: (() => void)[] = [];
   private pendingScore: alphaTab.model.Score | null = null;
 
@@ -49,7 +59,8 @@ export class ScorePlayer {
     s.core.useWorkers = false; // render on the page thread: simpler, errors surface, scores are small
     s.core.logLevel = alphaTab.LogLevel.Warning;
     s.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
-    s.player.soundFont = base + 'soundfont/sonivox.sf2';
+    this.defaultSoundFontUrl = base + 'sounds/GeneralUser-GS.sf2';
+    s.player.soundFont = this.defaultSoundFontUrl;
     s.player.scrollElement = scrollEl;
     s.player.enableCursor = true;
     s.player.enableAnimatedBeatCursor = true;
@@ -61,6 +72,9 @@ export class ScorePlayer {
 
     const a = this.api;
     a.playerReady.on(() => this.update({ ready: true }));
+    a.soundFontLoaded.on(() => this.update({ soundFontLoads: this.status.soundFontLoads + 1 }));
+    // Swing is a playback feel: shift off-beat 8ths in the generated MIDI, never in the score.
+    a.midiLoad.on((file) => applySwing(file as unknown as Parameters<typeof applySwing>[0], this.swing));
     a.playerStateChanged.on((e) => this.update({ playing: e.state === alphaTab.synth.PlayerState.Playing }));
     a.playerPositionChanged.on((e) => this.update({ tick: e.currentTick, endTick: e.endTick }));
     a.playedBeatChanged.on((beat) => this.update({ currentBar: beat.voice.bar.index }));
@@ -77,6 +91,8 @@ export class ScorePlayer {
       }, 50);
     });
     a.midiLoaded.on(() => {
+      // alphaTab ignores playbackInfo.isMute/isSolo when it builds playback: apply them to the synth.
+      this.applyMuteSolo();
       const r = this.resumeAfterLoad;
       this.resumeAfterLoad = null;
       if (r) {
@@ -137,6 +153,8 @@ export class ScorePlayer {
     const first = !this.lastSong || newFile;
     this.lastStructure = structure;
     this.lastSong = song;
+    this.swing = song.playback?.swing ?? 0;
+    this.update({ swing: this.swing });
     const score = toAlphaTabScore(song, this.api.settings);
     const visible = song.tracks.map((t, i) => (t.display.visible ? i : -1)).filter((i) => i >= 0);
     this.renderedVolumes = song.tracks.map((t) => t.mixer.volume);
@@ -148,6 +166,18 @@ export class ScorePlayer {
     this.clearRange();
     this.pendingScore = score;
     this.api.renderScore(score, visible.length ? visible : [0]);
+  }
+
+  private applyMuteSolo() {
+    const score = this.api.score;
+    const song = this.lastSong;
+    if (!score || !song) return;
+    const muted = score.tracks.filter((_, i) => song.tracks[i]?.mixer.mute);
+    const solo = score.tracks.filter((_, i) => song.tracks[i]?.mixer.solo);
+    this.api.changeTrackMute(score.tracks.filter((_, i) => !song.tracks[i]?.mixer.mute), false);
+    this.api.changeTrackSolo(score.tracks.filter((_, i) => !song.tracks[i]?.mixer.solo), false);
+    if (muted.length) this.api.changeTrackMute(muted, true);
+    if (solo.length) this.api.changeTrackSolo(solo, true);
   }
 
   private applyMixer(song: Song) {
@@ -174,6 +204,29 @@ export class ScorePlayer {
       if (this.status.playing) a.pause();
       a.loadMidiForScore();
     }
+  }
+
+  /** Load a SoundFont (bytes of a .sf2/.sf3), or the bundled default with null. */
+  setSoundFont(bytes: Uint8Array | null, name: string) {
+    const wasPlaying = this.status.playing;
+    if (wasPlaying) this.api.pause();
+    this.api.resetSoundFonts();
+    if (bytes) this.api.loadSoundFont(bytes, false);
+    else this.api.loadSoundFont(this.defaultSoundFontUrl, false);
+    this.update({ soundFont: name });
+  }
+
+  /** Wait until n SoundFont loads have finished in total. */
+  waitSoundFontLoads(n: number, timeoutMs = 30000): Promise<boolean> {
+    return new Promise((resolve) => {
+      const t0 = performance.now();
+      const tick = () => {
+        if (this.status.soundFontLoads >= n) resolve(true);
+        else if (performance.now() - t0 > timeoutMs) resolve(false);
+        else setTimeout(tick, 50);
+      };
+      tick();
+    });
   }
 
   waitForRender(timeoutMs = 30000): Promise<void> {
@@ -232,6 +285,16 @@ export class ScorePlayer {
     this.api.highlightPlaybackRange(first, last);
     this.api.applyPlaybackRangeFromHighlight();
     this.update({ range: { startBar, endBar } });
+  }
+
+  /** Bar index under a point in the score panel (host coordinates, px), or -1. */
+  barAtPoint(x: number, y: number): number {
+    const systems = this.api.boundsLookup?.staffSystems ?? [];
+    let sys = systems.find((s) => y >= s.realBounds.y && y < s.realBounds.y + s.realBounds.h);
+    if (!sys) sys = systems.find((s) => y < s.realBounds.y); // just above a system: its chord/section band
+    if (!sys) return -1;
+    const mb = sys.bars.find((b) => x >= b.realBounds.x && x < b.realBounds.x + b.realBounds.w);
+    return mb ? mb.index : -1;
   }
 
   clearRange() {

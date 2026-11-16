@@ -33,6 +33,26 @@ protocol.registerSchemesAsPrivileged([
 
 const rendererDir = join(__dirname, '..', 'renderer');
 
+// ---------- app settings (userData/settings.json) ----------
+interface AppSettings {
+  /** User SoundFont path, or null for the bundled default. */
+  soundFont: string | null;
+}
+const settingsFile = () => join(app.getPath('userData'), 'settings.json');
+function readSettings(): AppSettings {
+  try {
+    return { soundFont: null, ...JSON.parse(readFileSync(settingsFile(), 'utf8')) };
+  } catch {
+    return { soundFont: null };
+  }
+}
+function writeSettings(patch: Partial<AppSettings>): AppSettings {
+  const next = { ...readSettings(), ...patch };
+  mkdirSync(app.getPath('userData'), { recursive: true });
+  writeFileSync(settingsFile(), JSON.stringify(next, null, 1));
+  return next;
+}
+
 // ---------- recovery ----------
 const recoveryDir = () => join(app.getPath('userData'), 'recovery');
 const lockFile = () => join(recoveryDir(), 'session.lock');
@@ -111,6 +131,18 @@ ipcMain.handle('open-dialog', async () => {
       { name: 'Music files', extensions: ['mgproj', 'musicxml', 'xml', 'mxl', 'gp', 'gp3', 'gp4', 'gp5', 'gpx', 'mid', 'midi'] },
       { name: 'All files', extensions: ['*'] },
     ],
+  });
+  return r.canceled ? null : r.filePaths[0];
+});
+
+ipcMain.handle('settings-get', () => readSettings());
+ipcMain.handle('settings-set', (_e, patch: Partial<AppSettings>) => writeSettings(patch));
+ipcMain.handle('file-exists', (_e, path: string) => !!path && existsSync(path));
+ipcMain.handle('pick-soundfont', async () => {
+  const r = await dialog.showOpenDialog(win!, {
+    title: 'Load SoundFont',
+    properties: ['openFile'],
+    filters: [{ name: 'SoundFont', extensions: ['sf2', 'sf3'] }],
   });
   return r.canceled ? null : r.filePaths[0];
 });

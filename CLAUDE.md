@@ -49,7 +49,7 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
 - Install: `npm install`, then `node node_modules/electron/install.js` (npm 11's
   allow-scripts skips Electron's binary download).
 - Dev run (visible window, for Dan): `npm run dev`
-- Unit tests (model, import counts, save/load, transpose, undo): `npm test`
+- Unit tests (model, import counts, save/load, transpose, undo, chords, split, band styles): `npm test`
 - Typecheck: `npm run typecheck`
 - Build: `npm run build` (-> `out/`). Windows app: `npm run dist` ->
   `dist/win-unpacked/musicGenie.exe` + `dist/musicGenie-<ver>-portable.exe`.
@@ -58,6 +58,11 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   (after `npm run build`). Options: `--only=1,5`, `--no-sound-check`.
   Item 6 is the only step that unmutes (2 s); always pass `--no-sound-check`
   unless a sound check is actually needed.
+- Round 2 app checks: `npm run e2e:r2` (packaged) / `npm run e2e:r2:dev`; report
+  `test-results/report-round2.json`. Sound checks: item 1 (2 s) and item 7 (4 s); skip
+  with `--no-sound-check`.
+- From Git Bash, `cmd //c "start /belownormal ..."` hangs: run Below Normal builds from
+  PowerShell (`cmd /c "start /belownormal /b /wait npm run build"`).
 - Regenerate the MusicXML test piece: `node tests/fixtures/make-ode-to-joy.mjs`
 
 ## Standing facts
@@ -80,6 +85,21 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   splits one two-hand piano track into treble/bass staves at middle C.
 - Recovery: `userData/recovery/session.lock` + `autosave.mgproj`; a lock left by
   a crash turns the autosave into a restore offer on next start.
+- Default SoundFont: GeneralUser GS 2.0.3 (S. Christian Collins), tracked in
+  `src/renderer/public/sounds/` with its licence (GeneralUser GS License v2.0: free use,
+  "use it in your software projects", may repackage). `public/soundfont/` and
+  `public/font/` are gitignored (the alphaTab Vite plugin fills them). The user's
+  SoundFont path is in `userData/settings.json` and in the project (`playback.soundFont`).
+- Project format v2 (`SCHEMA_VERSION = 2`): `song.playback` (swing, soundFont),
+  `song.band` (panel setup), `track.generated` (style, role, complexity, seed,
+  sectionSeeds, contentHash), `track.derived` (split parts), `chordSymbols[].source`.
+- Band engine (`src/model/band.ts`) is pure and seeded: same song + settings + seed = same
+  notes. "Edited by hand" = staves hash differs from `generated.contentHash`.
+- Swing is applied at playback only, in `api.midiLoad` (`src/render/swing.ts`).
+- alphaTab ignores `playbackInfo.isMute/isSolo` when building playback, so
+  `ScorePlayer` re-applies mute/solo on every `midiLoaded`.
+- Never use native dialogs for questions (they would show over a hidden test window):
+  `store.ask()` shows an in-app one.
 
 ## Testing on Dan's PC: STANDING RULES
 Dan uses his PC while you test. Your test runs must not be heard and must not
@@ -109,12 +129,13 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Round 1 is done and checked by Dan: import (MusicXML, Guitar Pro, MIDI), score
-and tab view, playback with cursor, instrument per track, mixer, speed,
-transpose, undo/redo, autosave. Current round: Round 2, the virtual band
-(chord recognition, part splitting, sections, 5 styles, band panel, better
-default SoundFont).
-Layout: `src/model` (pure model + edits + undo + .mgproj),
+Round 1 is done and checked by Dan. Round 2 (virtual band v1) is done and
+awaiting Dan's check: GeneralUser GS + Load SoundFont, chord recognition + chord
+picker, split into melody/harmony/bass, sections, 5 band styles with a Band panel
+(Generate / Try another / Regenerate), swing, all saved in project format v2.
+Next: Round 3 (tab editing + Rocksmith), after Dan's check and Wwise question.
+Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
+sections, band engine),
 `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
-`src/main` (Electron), `src/preload`, `src/renderer` (React UI, player,
-store, test API), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).
+`src/main` (Electron, settings.json), `src/preload`, `src/renderer` (React UI,
+Band panel, dialogs, player, store, test API), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).

@@ -18,6 +18,57 @@ export interface Song {
   /** Chord symbols placed in time (shown above the first visible track). */
   chordSymbols: ChordSymbol[];
   tracks: Track[];
+  /** Playback feel and sound (schema v2+). Missing = straight, default SoundFont. */
+  playback?: Playback;
+  /** Last band-panel setup used on this song (schema v2+). */
+  band?: BandSettings;
+}
+
+export interface Playback {
+  /** 0 = straight eighths, 1 = full triplet swing (2:1). Applied at playback only; notation stays straight. */
+  swing: number;
+  /** Path of a user SoundFont (.sf2/.sf3). Missing = the bundled default. */
+  soundFont?: string;
+}
+
+export type StyleId = 'rock' | 'blues' | 'country' | 'jazz' | 'pop';
+export type BandRole = 'drums' | 'bass' | 'rhythm' | 'lead';
+export type Complexity = 'simple' | 'normal' | 'busy';
+
+export interface PlayerSetup {
+  role: BandRole;
+  on: boolean;
+  instrumentId: string;
+  complexity: Complexity;
+  /** Lead only: octaves added on top of the automatic range fit (-2..2). */
+  octave?: number;
+}
+
+export interface BandSettings {
+  style: StyleId;
+  players: PlayerSetup[];
+  bassFollowsKick: boolean;
+  /** Hold the final chord in the last bar. */
+  ending: boolean;
+  seed: number;
+  /** Track the band plays along to (melody + harmony source). */
+  sourceTrackId?: string;
+}
+
+/** Marks a track the band engine made. Same inputs + seed = same notes. */
+export interface GeneratedTag {
+  style: StyleId;
+  role: BandRole;
+  complexity: Complexity;
+  seed: number;
+  /** Per-section seed overrides from "Regenerate section" (key = section start bar). */
+  sectionSeeds?: Record<string, number>;
+  sourceTrackId?: string;
+  bassFollowsKick?: boolean;
+  ending?: boolean;
+  octave?: number;
+  /** Hash of the staves as generated. Different now = edited by hand. */
+  contentHash: string;
 }
 
 export interface BarHeader {
@@ -46,6 +97,8 @@ export interface ChordSymbol {
   bar: number;
   tick: number;
   name: string;
+  /** Where it came from. Missing = came with the file. */
+  source?: 'file' | 'detected' | 'user';
 }
 
 export interface Instrument {
@@ -75,7 +128,13 @@ export interface Track {
   mixer: Mixer;
   display: TrackDisplay;
   staves: Staff[];
+  /** Set on band-engine tracks. */
+  generated?: GeneratedTag;
+  /** Set on tracks made by "Split into band parts". */
+  derived?: { from: string; part: SplitPart };
 }
+
+export type SplitPart = 'melody' | 'harmony' | 'bass';
 
 export interface Mixer {
   /** 0..1 */

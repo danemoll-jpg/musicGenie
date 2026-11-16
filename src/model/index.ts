@@ -6,3 +6,8 @@ export * from './edits';
 export * from './history';
 export * from './project';
 export * from './factory';
+export * from './events';
+export * from './chords';
+export * from './split';
+export * from './sections';
+export * from './band';

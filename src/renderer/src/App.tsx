@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { INSTRUMENT_GROUPS, INSTRUMENTS, type DisplayMode, type Track } from '../../model';
-import { ScorePlayer, type PlayerStatus } from './player';
+import { hashOf, INSTRUMENT_GROUPS, INSTRUMENTS, STYLES, type DisplayMode, type Track } from '../../model';
+import { BandPanel } from './BandPanel';
+import { ChordPickerPopover, ConfirmDialog, SettingsMenu } from './Overlays';
+import { DEFAULT_SOUNDFONT, ScorePlayer, type PlayerStatus } from './player';
 import type { AppState, Store } from './store';
 
 function useStore(store: Store): AppState {
@@ -13,6 +15,8 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
   const scrollRef = useRef<HTMLDivElement>(null);
   const [player, setPlayer] = useState<ScorePlayer | null>(null);
   const [status, setStatus] = useState<PlayerStatus | null>(null);
+  const [showBand, setShowBand] = useState(true);
+  const loadedSoundFont = useRef<string | null>(null);
 
   useEffect(() => {
     const p = new ScorePlayer(hostRef.current!, scrollRef.current!);
@@ -28,6 +32,43 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
   useEffect(() => {
     if (player && state.song) player.show(state.song, state.loadId);
   }, [player, state.song, state.loadId]);
+
+  // SoundFont: load the user's file when chosen, the built-in one when cleared.
+  useEffect(() => {
+    if (!player) return;
+    const want = state.soundFontPath;
+    if (want === loadedSoundFont.current) return;
+    loadedSoundFont.current = want;
+    if (want) {
+      window.mg.readFile(want)
+        .then((f) => player.setSoundFont(f.bytes, f.name))
+        .catch((e) => store.showError('Could not load the SoundFont: ' + (e as Error).message));
+    } else player.setSoundFont(null, DEFAULT_SOUNDFONT);
+  }, [player, state.soundFontPath]);
+
+  // Click a chord symbol in the score -> chord picker.
+  useEffect(() => {
+    const host = hostRef.current;
+    const scroll = scrollRef.current;
+    if (!host || !scroll || !player) return;
+    const onClick = (e: MouseEvent) => {
+      const song = store.state.song;
+      const text = (e.target as Element)?.closest?.('text');
+      const label = text?.textContent?.trim();
+      if (!song || !label) return;
+      const r = host.getBoundingClientRect();
+      const bar = player.barAtPoint(e.clientX - r.left, e.clientY - r.top);
+      const chord = song.chordSymbols.find((c) => c.bar === bar && c.name === label);
+      if (!chord) return;
+      const sr = scroll.getBoundingClientRect();
+      store.openChordPicker({
+        bar: chord.bar, tick: chord.tick, name: chord.name,
+        x: e.clientX - sr.left + scroll.scrollLeft, y: e.clientY - sr.top + scroll.scrollTop + 14,
+      });
+    };
+    host.addEventListener('click', onClick);
+    return () => host.removeEventListener('click', onClick);
+  }, [player]);
 
   useEffect(() => {
     if (!player) return;
@@ -62,6 +103,13 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
           </span>
           <button className="primary" onClick={() => store.restoreRecovery()}>Restore</button>
           <button onClick={() => store.dismissRecovery()}>Discard</button>
+        </div>
+      )}
+      <ConfirmDialog state={state} store={store} />
+      {state.info && (
+        <div className="banner info">
+          <span>{state.info}</span>
+          <button onClick={() => store.clearInfo()}>OK</button>
         </div>
       )}
       {state.error && (
@@ -115,6 +163,10 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
           <span className="val" data-testid="transpose-total">{state.transposeTotal > 0 ? '+' : ''}{state.transposeTotal}</span>
           <button disabled={!song} onClick={() => store.transpose(1)}>+</button>
         </div>
+        <div className="group right">
+          <button className={showBand ? 'chip' : ''} disabled={!song} onClick={() => setShowBand(!showBand)} title="Chords, sections and the virtual band">🎸 Band</button>
+          <SettingsMenu state={state} store={store} soundFont={status?.soundFont ?? DEFAULT_SOUNDFONT} />
+        </div>
       </header>
       <div className="main">
         <aside className="tracks">
@@ -132,12 +184,16 @@ export function App({ store, onPlayer }: { store: Store; onPlayer: (p: ScorePlay
         </aside>
         <section className="score" ref={scrollRef}>
           <div ref={hostRef} className="at-host" />
+          <ChordPickerPopover state={state} store={store} />
         </section>
+        {showBand && song && <BandPanel state={state} store={store} status={status} />}
       </div>
       <footer className="status">
         <span>{status?.ready ? 'Player ready' : song ? 'Loading sounds…' : ''}</span>
         {status && song && <span data-testid="bar-indicator">Bar {status.currentBar + 1} / {song.bars.length}</span>}
         {state.lastAutosave && <span>Autosaved {new Date(state.lastAutosave).toLocaleTimeString()}</span>}
+        {status && <span data-testid="soundfont">Sound: {status.soundFont}</span>}
+        {!!status?.swing && <span>Swing {Math.round(status.swing * 100)}%</span>}
         {window.mg.flags.mute && <span className="muted">MUTED (--mute)</span>}
       </footer>
     </div>
@@ -152,6 +208,13 @@ function TrackRow({ track: t, store }: { track: Track; store: Store }) {
         <input type="checkbox" checked={t.display.visible} title="Show this track"
           onChange={(e) => store.setDisplay(t.id, { visible: e.target.checked })} />
         <span className="name" title={t.name}>{t.name}</span>
+        {t.generated && (
+          <span className={`tag ${hashOf(t.staves) !== t.generated.contentHash ? 'edited' : ''}`}
+            title={hashOf(t.staves) !== t.generated.contentHash ? 'Generated, then edited by hand' : `Generated: ${STYLES[t.generated.style].name}, ${t.generated.complexity}, seed ${t.generated.seed}`}>
+            {hashOf(t.staves) !== t.generated.contentHash ? 'edited' : STYLES[t.generated.style].name.split(' ')[0]}
+          </span>
+        )}
+        {t.derived && <span className="tag" title="Made by Split into band parts">{t.derived.part}</span>}
         <button className={`ms ${t.mixer.mute ? 'on mute' : ''}`} title="Mute" onClick={() => store.setMixer(t.id, { mute: !t.mixer.mute })}>M</button>
         <button className={`ms ${t.mixer.solo ? 'on solo' : ''}`} title="Solo" onClick={() => store.setMixer(t.id, { solo: !t.mixer.solo })}>S</button>
       </div>
@@ -179,6 +242,10 @@ function TrackRow({ track: t, store }: { track: Track; store: Store }) {
           <input type="range" min={-1} max={1} step={0.1} value={t.mixer.pan}
             onChange={(e) => store.setMixer(t.id, { pan: Number(e.target.value) })} />
         </label>
+        {!t.instrument.percussion && !t.generated && (
+          <button className="split" title="Split into band parts: melody, harmony, bass (this track is kept, muted)"
+            onClick={() => store.splitTrack(t.id)}>Split</button>
+        )}
         {!t.instrument.percussion && (
           <span className="tr" title="Transpose this track">
             <button onClick={() => store.transpose(-1, t.id)}>−</button>

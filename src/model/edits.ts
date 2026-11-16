@@ -152,3 +152,14 @@ export function countNoteOnsets(song: Song, trackIndex?: number): number {
         for (const v of m.voices) for (const b of v.beats) n += b.notes.filter((x) => !x.tieFromPrevious).length;
   return n;
 }
+
+/** Change playback settings (swing, SoundFont). `soundFont: null` removes the song's own SoundFont. */
+export function setPlayback(song: Song, patch: { swing?: number; soundFont?: string | null }): Song {
+  const next = cloneSong(song);
+  const pb = { swing: 0, ...(next.playback ?? {}) };
+  if (patch.swing !== undefined) pb.swing = Math.max(0, Math.min(1, patch.swing));
+  if (patch.soundFont === null) delete pb.soundFont;
+  else if (patch.soundFont !== undefined) pb.soundFont = patch.soundFont;
+  next.playback = pb;
+  return next;
+}
