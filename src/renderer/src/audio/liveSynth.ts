@@ -120,6 +120,7 @@ export class LiveSynth {
     const tsf = await this.ensure();
     if (!tsf) return null;
     this.reroute();
+    engine.wake();
     if (this.ctx?.state === 'suspended') await this.ctx.resume();
     if (!percussion && !this.programs.has(program)) {
       this.programs.add(program);

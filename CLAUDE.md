@@ -171,6 +171,9 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   outputs feed `MixGraph` strips (`audio/graph.ts`). Volume/pan/mute/solo are Web Audio gains
   (alphaTab's `pb.volume` fixed at 13, balance 8). alphaTab puts the metronome on "highest used
   channel + 1" (`engine.metronomeChannel`), routed to `graph.click` (no effects). Buffer 1 s.
+  The engine SUSPENDS its AudioContext after 5 s with nothing playing (`engine.wake()` on play,
+  live notes, open audio input): leaving the device streaming silence crashed the page after
+  several minutes in hidden test runs.
 - Fader law (`src/model/mix.ts`): position 0.8 = 0 dB, dB = 60*log10(pos/0.8); equal-power pan.
 - Effects (`audio/fx.ts`): Web Audio nodes plus our own worklet processors `mg-comp`
   (Web Audio's DynamicsCompressor adds automatic makeup gain, so it is not used), `mg-limiter`

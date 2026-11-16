@@ -132,75 +132,79 @@ Dan's check list for Round 4 (For Dan to check):
   repeats writes onto the repeated bars; step entry uses the cursor beat's length (set it first);
   chord shapes stop at fret 15; the piano roll edits one staff at a time.
 
-## Current Objective: Round 5, "production"
-Goal: make it sound like a finished recording and get it out of the app:
-per-track effects and a real mixer, recorded/imported audio tracks, and
-export to audio, stems, MIDI, MusicXML, Guitar Pro and printable PDF.
-Standing check for Dan (keep in "For Dan to check" until he reports):
-play an exported song in Rocksmith 2014.
-
-1. **Playback engine with per-track outputs (do this first, report the
-   choice).** Effects need each track as its own audio stream; alphaTab's
-   player mixes everything into one. Evaluate (a) a SoundFont synth with
-   separate outputs per track/channel (e.g. SpessaSynth) driven from our
-   model, with alphaTab kept for drawing and the cursor, versus (b) any
-   alphaTab option that gives per-track outputs. Pick the one that keeps the
-   cursor in sync and works offline (for export). Rounds 1-4 playback
-   features (cursor, loop, speed, swing, count-in, metronome, mute/solo,
-   backing track, Rocksmith render) must all still work. Check: the Round 1-4
-   app checks pass on the new engine; each track's output measured
-   separately (pre-gain level above 0 only on that track when soloed).
-2. **Mixer view.** A strip per track plus master: fader, pan, mute/solo,
-   level meter with clip light, an effects chain (add/remove/reorder/bypass),
-   and send levels to two shared buses (Reverb, Delay). Check: screenshot;
-   unit tests for gain/pan maths.
-3. **Effects.** EQ (3-band + parametric), compressor, gate, overdrive/
-   distortion, guitar and bass amp simulation (with cabinet impulse
-   responses), chorus, flanger/phaser, tremolo, delay (tempo-synced),
-   reverb (convolution with bundled freely licensed impulse responses;
-   note the licences in `CLAUDE.md`), master limiter. Presets per instrument
-   ("Clean guitar", "Crunch", "Lead", "Bass DI", "Bass drive", "Drum room",
-   "Vocal plate"...), saved user presets. Check: each effect changes the
-   measured signal in the expected way (e.g. a low-cut EQ lowers energy below
-   the cutoff) in an offline render; screenshot of an amp chain.
-4. **Automation.** Volume, pan and any effect knob can change over time:
-   draw/edit points in a lane under the track, plays back and renders.
-   Check: a volume fade-out measured in an offline render.
-5. **Audio tracks.** Import WAV/MP3/OGG/FLAC onto a new audio track; move,
-   trim, split, fade in/out, clip gain; it stays at its bar position when the
-   tempo changes (option to stretch is NOT needed this round). Record from
-   any audio input (device picker, e.g. a USB interface or the Rocksmith
-   Real Tone Cable), with count-in, metronome, input level meter, input
-   monitoring off by default, and a latency setting with a loopback test.
-   Media is saved in a folder next to the project (`<name>_media/`);
-   "Save as package" zips project + media into one `.mgpack`. No real
-   input in tests: use a simulated input stream. Check: a simulated
-   recording lands at the expected bar with the latency offset applied.
-6. **Computer keyboard as a piano** (Dan has no MIDI keyboard): the
-   A-S-D-F row = white keys, W-E-T-Y-U = black keys, Z/X = octave down/up,
-   C/V = velocity; works for hearing notes, step entry and recording, the
-   same as a MIDI keyboard. Only active while a "Keyboard piano" toggle is
-   on, so it never clashes with shortcuts. Check: simulated key presses
-   record the expected notes.
-7. **Export.** File > Export: mixdown WAV and MP3 (with effects, offline,
-   faster than real time), optional loudness normalise (-14 LUFS) and a
-   peak limit; stems (one WAV per track or per bus); MIDI; MusicXML; Guitar
-   Pro (.gp, if alphaTab's exporter works); PDF/print of the full score or
-   chosen parts (notation, tabs or both; title, composer, page numbers; page
-   size Letter/A4). Check: exported MIDI and MusicXML re-import with the same
-   note counts; WAV length matches the song within 50 ms; loudness within
-   1 LU of target; PDF screenshot of page 1.
-8. **Save/load, undo, regression.** Mixer, effects, automation and audio
-   clips survive save/reopen (and `.mgpack` open on its own); each edit is
-   one undo step; the Round 1-4 app checks still pass on the new exe.
+### Round 5, "production" (2026-11-16): DONE in the app (no real audio input or MIDI keyboard here: recording is verified with a simulated input only)
+Checks ran in the packaged 0.5.0 app (`npm run e2e:r5`), hidden (off-screen, never shown or
+focusable) and `--mute`; speaker level measured 0 on every step that made sound (band, mixer,
+automation, clips, recording, keyboard piano: pre-gain 0.02-0.44, speakers 0). **No sound checks
+this round.** Unit tests 160/160 (`npm test`, 18 new). Rounds 1-4 app checks re-run on the 0.5.0
+exe: all pass. Screenshots `test-results/r5-*.png`, PDF `r5-7-score.pdf`; report `report-round5.json`.
+Everything is in the dock: **🎚 Mixer** (toolbar), 〰 Automation, 🎙 Audio; **⇩ Export…** and
+**Package…** in the toolbar.
+1. Playback engine: **done. Choice: (b) alphaTab's own synthesizer, moved to the page thread and
+   split per MIDI channel** (each track owns its channels) into a 17-output AudioWorklet that feeds
+   a Web Audio mixer; the worklet's played frames drive alphaTab's cursor. Why: every alphaTab
+   feature (cursor, loop/range, speed, swing, count-in, metronome, repeats) keeps working unchanged,
+   the same SoundFonts sound the same, and offline export uses the same synth + graph. SpessaSynth
+   (a) would have meant re-implementing all of that on a second clock. Check: Rock band, each track
+   soloed in turn = level only on that track (others exactly 0); Rounds 1-4 pass on it.
+2. Mixer view: **done.** Strip per track + Reverb, Delay, Master: fader (dB), pan, M/S, stereo meter
+   with clip light, effects chain (add/remove/reorder/bypass/settings), presets, Rev/Dly sends.
+   Check: `r5-2-mixer.png` (sends feed both buses); unit tests for fader law, pan law, mute/solo.
+3. Effects: **done.** 3-band + parametric EQ, compressor, gate, overdrive/distortion/fuzz, guitar and
+   bass amp with 5 cabinets, chorus, flanger, phaser, tremolo, tempo-synced delay, reverb
+   (room/hall/plate), master limiter; 10 presets (Clean guitar, Crunch, Lead, Bass DI, Bass drive,
+   Drum room, Vocal plate…) + saved user presets. Impulse responses are generated by our own code
+   (no third-party licence). Check: 18 offline signal tests all pass (e.g. low cut 500 Hz: -27.8 dB at
+   100 Hz, 0.15 dB at 3 kHz; compressor -20.4 dB loud / 0 dB quiet; delay echo at 250.0 ms; limiter
+   peak -3.2 dB with ceiling -3); amp chain `r5-3-amp-chain.png`.
+4. Automation: **done.** Lanes for volume, pan and any effect knob; click/drag/right-click points;
+   follows playback, loops and repeats; renders. Check: fade bar 5 -> 13 in an offline render: bars
+   1-4 unchanged (0.0 dB), then -1.3 … -61 dB, silent after (`r5-4-automation.png`).
+5. Audio tracks: **done.** Import WAV/MP3/OGG/FLAC; move, trim, split, fades, clip gain (each one undo
+   step); clips stay on their bar when the tempo changes; record from any input (device picker, count-in,
+   metronome, input meter, monitoring off by default, latency + loopback test); media copied to
+   `<name>_media\`, **Package…** = one `.mgpack`. Check: simulated 80 ms cable -> latency test measured
+   80 ms; take placed at bar 5, recorded metronome clicks 0.3-1 ms from the beats; clip played back.
+6. Keyboard piano: **done.** Toggle "⌨ Keyboard piano" (A-row white keys, W-row black, Z/X octave,
+   C/V velocity); feeds the MIDI path (hear, step entry, record). Check: simulated keys recorded
+   C4 D4 E4 F4 C5 exactly one beat apart; keys do nothing while the toggle is off.
+7. Export: **done.** WAV + MP3 (192 kbps) through the mixer, -14 LUFS normalise + -1 dB peak limit,
+   stems per track and per bus, MIDI, MusicXML, Guitar Pro (.gp), PDF (parts, notation/tab/both,
+   Letter/A4, title, composer, page numbers). Check: MIDI, MusicXML and GP re-import 869/869 notes;
+   WAV 38 401 ms vs song 38 400 ms; WAV measures -14.0 LUFS (MP3 -14.3), peak -3.6 dB; rendered 4.5x
+   faster than real time; PDF 5 pages (`r5-7-pdf-page1.png`).
+8. Save/load, undo, regression: **done.** Format v5. Check: 8 kinds of edit (preset, knob, 5-move fader
+   drag, send, master, automation, audio track, clip) each one undo step; save -> reopen identical,
+   media copied; `.mgpack` opened after deleting the project folder: identical, audio plays (stem peak 0.95).
+   Found + fixed on the way: Web Audio's compressor adds hidden makeup gain (replaced by our own);
+   alphaTab moves the metronome channel; an idle audio device crashed the page after minutes, so the
+   engine now suspends audio after 5 s of silence (like alphaTab did).
 
 ### For Dan to check (fill in at end of round)
-- Play an exported song in Rocksmith 2014 (timing, note placement,
-  difficulty levels). Still pending from Round 3.
+- Play an exported song in Rocksmith 2014 (timing, note placement, difficulty levels). Still
+  pending from Round 3.
+- Run `dist\musicGenie-0.5.0-portable.exe`. Open Ode to Joy, Band > Generate (Rock), Play: should
+  sound like before. **🎚 Mixer**: move faders/pan, mute/solo, watch the meters; pick a Preset on
+  each strip (Crunch on rhythm, Lead on lead, Bass drive, Drum room); raise Rev/Dly sends.
+- Click an effect name to open its knobs; ⏻ bypass, ▲▼ reorder, ✕ remove; "+ Effect…" adds one.
+- 〰 Automation: "+ Lane…" Volume, click points to make a fade; play it.
+- 🎙 Audio: + Audio track, Import audio… (any WAV/MP3). Drag clips, drag edges to trim, fades in the
+  clip box. **Recording (real input, not tested here):** pick your interface or the Real Tone Cable,
+  connect output to input with a cable and press Test latency, then ● Record (count-in + metronome).
+- ⌨ Keyboard piano (toolbar): A S D F… play notes through the selected track; 🎛 MIDI tab ▸ Record.
+- ⇩ Export…: writes WAV, MP3, MIDI, MusicXML, .gp, PDF (and stems) to Documents\musicGenie\Exports.
+  Open the PDF and the .gp in Guitar Pro / the .musicxml in MuseScore if you have them.
+- Known limits: drum tracks share one mixer strip if there are several (MIDI channel 10); over 15
+  melodic tracks share channels; clips are not time-stretched at other tempos/speeds; MIDI import
+  of 32nd/triplet-heavy songs quantises to 16ths (the exported file itself has every note); MP3
+  encoder is LGPL (lamejs, separate chunk).
+
+## Current Objective
+Round 5 is done; waiting for Dan's checks above before planning Round 6.
 
 ## Next Steps (Do Not Start Yet)
-- **Later, unordered:** test item 7 of Round 4 with a real MIDI keyboard if
-  Dan gets one; better sound libraries / VST3 instruments, singing, "describe it" assisted
+- **Later, unordered:** test item 7 of Round 4 with a real MIDI keyboard and Round 5
+  recording with a real audio input (interface / Real Tone Cable); better sound libraries / VST3 instruments, singing, "describe it" assisted
   composition, PDF score reading (Audiveris), audio to notes (basic-pitch),
   stem splitting (Demucs). Plug these in from existing tools, don't build them.
 

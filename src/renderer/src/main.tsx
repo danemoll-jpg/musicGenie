@@ -14,6 +14,7 @@ import { KeyboardPiano } from './kbdPiano';
 import { kbdCtl } from './Round4';
 import { liveSynth } from './audio/liveSynth';
 import { engine } from './audio/engine';
+import { recorder } from './audio/recorder';
 import { PrintView } from './PrintView';
 import './styles.css';
 
@@ -35,6 +36,7 @@ if (new URLSearchParams(location.search).get('print') === '1') {
     return (t && engine.graph.strip(t.id)?.input) ?? null;
   };
 
+  engine.keepAwake = () => recorder.state.open || midi.state.held.length > 0 || kbd.state.held.length > 0;
   createRoot(document.getElementById('root')!).render(<App store={store} midi={midi} onPlayer={(p, b) => { player = p; backing = b; }} />);
 
   void store.checkRecovery();

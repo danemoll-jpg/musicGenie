@@ -112,7 +112,7 @@ class EngineOutput {
     }
   }
   play() {
-    void this.engine.ctx.resume();
+    this.engine.wake();
     this.post({ cmd: 'play' });
   }
   pause() {
@@ -122,7 +122,7 @@ class EngineOutput {
     this.post({ cmd: 'pause' });
   }
   activate() {
-    void this.engine.ctx.resume();
+    this.engine.wake();
   }
   addSamples(samples: Float32Array) {
     const frames = samples.length / 2;
@@ -163,8 +163,25 @@ export class Engine {
   private autoTimer: ReturnType<typeof setInterval> | null = null;
   private lanes: { track: Track; param: string; pts: { t: number; v: number }[] }[] = [];
 
+  /** Something needs the live context running even when the song is stopped (an open input, live notes). */
+  keepAwake: () => boolean = () => false;
+  private lastActive = performance.now();
+
+  /** Wake the context (play, live notes, recording). */
+  wake() {
+    this.lastActive = performance.now();
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
   constructor() {
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
+    // Like alphaTab's own output, stop streaming to the audio device while nothing plays:
+    // suspend after 5 s idle (resumed by play, live notes or an open input).
+    setInterval(() => {
+      const busy = this.synth?.state === 1 || this.keepAwake();
+      if (busy) this.lastActive = performance.now();
+      else if (this.ctx.state === 'running' && performance.now() - this.lastActive > 5000) void this.ctx.suspend();
+    }, 1000);
     let bpm = 120;
     this.graph = new MixGraph(this.ctx, this.ctx.destination, { bpm: () => bpm });
     this.bpmRef = (v) => { bpm = v; };

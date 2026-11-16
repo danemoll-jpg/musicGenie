@@ -95,6 +95,7 @@ export class AudioRecorder {
 
   private async attach(src: AudioNode) {
     const ctx = engine.ctx;
+    engine.wake();
     await loadWorklets(ctx);
     const node = new AudioWorkletNode(ctx, 'mg-recorder', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
     node.port.onmessage = (e) => {
