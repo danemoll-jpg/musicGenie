@@ -129,11 +129,11 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Round 1 is done and checked by Dan. Round 2 (virtual band v1) is done and
-awaiting Dan's check: GeneralUser GS + Load SoundFont, chord recognition + chord
-picker, split into melody/harmony/bass, sections, 5 band styles with a Band panel
-(Generate / Try another / Regenerate), swing, all saved in project format v2.
-Next: Round 3 (tab editing + Rocksmith), after Dan's check and Wwise question.
+Rounds 1-2 done: import (MusicXML, Guitar Pro, MIDI), score + tab view,
+playback, instruments, mixer, speed, transpose, undo, autosave; virtual band
+(chord detection, part split, sections, 5 styles, band panel, GeneralUser GS).
+Current round: Round 3, note/tab editing, techniques, tunings, and Rocksmith
+.psarc import + export through the .NET helper.
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine),
 `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,

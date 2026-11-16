@@ -50,7 +50,7 @@ Dan's check list for Round 1 (done):
   one voice per staff; the default sonivox SoundFont sounds basic; app has the
   default Electron icon; exe is unsigned (SmartScreen may warn).
 
-### Round 2, "virtual band v1" (2026-11-16): DONE, awaiting Dan's check
+### Round 2, "virtual band v1" (2026-11-16): DONE, Dan moved on to Round 3 with no issues reported
 Checks ran in the packaged app (`npm run e2e:r2`), hidden (off-screen, never shown or
 focusable) and `--mute`; speaker level measured 0 on every playing step. Unit tests 84/84
 (`npm test`). Screenshots: `test-results/r2-*.png`; report `test-results/report-round2.json`.
@@ -103,78 +103,89 @@ Dan's check list for Round 2 (fill in what you find):
   no note editing yet (Round 3/4); swing moves off-beat 8ths only; band parts never
   cross barlines; lead = the top line of the play-along track.
 
-## Round 2 plan (as written, for reference)
-Goal: open a piece (e.g. the piano Ode to Joy), pick a style, press Generate,
-and hear it played by a band (drums, bass, rhythm guitar or keys, a lead
-instrument on the melody), with every generated part shown as normal
-notation/tabs that can be edited like any other track.
+## Current Objective: Round 3, "tab editing + Rocksmith"
+Goal: edit guitar/bass parts note by note on the tab, open any Rocksmith
+2014 custom song (.psarc) as tabs with its audio, and export any guitar or
+bass part as a .psarc that plays in Rocksmith.
 
-Design rules for this round:
-- Generated tracks are ordinary tracks in the model plus a `generated` tag
-  (style, role, complexity, seed). Same inputs + seed = same notes (testable).
-- Never destroy the user's material: the source track is kept (muted, not
-  deleted). If a generated track has been edited by hand, Regenerate asks
-  before replacing it.
-- Generated guitar/bass parts get playable string/fret positions (they must
-  be Rocksmith-ready later).
-- Everything here is undoable as one step per Generate/Regenerate.
+Facts for this round:
+- Dan installed Audiokinetic Wwise on 2026-11-16 (version not recorded; find
+  it and note the path and version in `CLAUDE.md`). DLC Builder supports Wwise
+  2019 and 2021.
+- Reference file: `TestData/private/Husker-Du_Could-You-Be-The-One_v1_p.psarc`
+  (bass arrangement, 7 difficulty levels, made with Toolkit 2.9.2 + EOF).
+  It is a copyrighted song: `TestData/private/` is git-ignored, never commit
+  it, and never copy its audio or chart into other test files.
+- Rocksmith limits: 6-string guitar and 4-string bass only (tunings are
+  per-string offsets from standard, capo allowed). Export refuses other
+  instruments with a clear message.
+- Rocksmith2014.NET (iminashi, GitHub) has the .psarc read/write, SNG
+  conversion, difficulty-level generation, arrangement checks and Wwise
+  conversion that DLC Builder uses. Check its licence and note it in
+  `CLAUDE.md`. Use its NuGet packages if published; otherwise add it as a git
+  submodule pinned to a release tag.
 
-1. **Better default sounds.** Bundle a fuller General MIDI SoundFont (e.g.
-   GeneralUser GS; check its licence allows bundling and note it in
-   `CLAUDE.md`), plus Settings > "Load SoundFont" for any .sf2/.sf3 (remember
-   the choice). Check: app loads it; one sound check of 10 s or less.
-2. **Chord recognition.** Work out chord symbols from the notes (per bar, or
-   per half bar / beat when the harmony moves faster), weighting by note
-   length and the bass note. Covers major, minor, 7, maj7, m7, dim, aug,
-   sus2/sus4, power chords, slash chords. Writes chord symbols into the model
-   and shows them above the score; click a chord symbol to change it from a
-   list. Doesn't overwrite chords that came with the file unless asked.
-   Check: Bach Prelude in C (one chord per bar, known answers) and Ode to Joy
-   (hand-labelled answers in a test fixture): at least 90% of bars match.
-3. **Split a part.** "Split into band parts" on any track: melody (top
-   line), bass (lowest notes), and the harmony in between, each as a new
-   track. Check: Ode to Joy piano splits into melody/bass/harmony; unit test
-   that every source note lands in exactly one part.
-4. **Sections.** Select bars and name them (Intro, Verse, Chorus, Bridge,
-   Solo, Outro); shown above the score. If a song has none, Generate treats it
-   as one section. Check: screenshot with sections shown.
-5. **Style engine: 5 styles.** Rock, Blues (shuffle), Country, Jazz (swing),
-   Pop. Each style defines per role:
-   - drums: groove + a fill at the end of each section, crash on the next
-     downbeat; GM drum kit, shown as drum notation;
-   - bass: root/fifth, walking (jazz), boom-chick (country), or "follow the
-     kick drum";
-   - rhythm guitar / keys: strumming, power chords, arpeggios or comping,
-     using sensible voicings for the instrument;
-   - lead: the melody line moved to a chosen instrument and octave.
-   Swing/shuffle feel is a playback setting on the song (straight / swing
-   amount), so swung styles sound right. Optional ending: final chord held.
-   Check: unit tests per style (notes in range for the instrument, all on
-   the chord tones / scale where expected, deterministic per seed).
-6. **Band panel.** Choose style; choose the lineup (which roles are on, and
-   the instrument for each); complexity per player (Simple / Normal / Busy);
-   "bass follows kick" toggle; Generate (whole song) and Regenerate (one
-   section or one player); "Try another" (new seed). Check: open Ode to Joy,
-   pick Rock, Generate; screenshot shows drums, bass, guitar and lead tracks
-   with notation/tabs.
-7. **Band playback.** The whole band plays together with the cursor
-   following, mixer controls work on generated tracks. Check: hidden, muted
-   run of each style: every generated track produces notes in the playing
-   range (pre-gain level above 0, speaker level 0); one sound check of 10 s
-   or less for the Rock arrangement.
-8. **Save/load + undo for all of the above.** Generated tags, sections,
-   chord symbols, swing and SoundFont choice survive save/reopen; each
-   Generate/Regenerate undoes in one step. Check: deep-equal save/reopen
-   test; undo after Generate restores the song exactly.
+1. **Note editing (tab and staff).** Click a beat to select it. On a tab:
+   type fret numbers on the selected string, arrows move between strings and
+   beats. On a staff: letters A-G enter notes, up/down change pitch.
+   Durations (whole to 64th), dots, ties, triplets, rests, delete,
+   copy/paste and insert/delete bars. Every edit is undoable and marks a
+   generated track as edited. Check: unit tests for each edit; screenshot of
+   a riff entered on a bass tab.
+2. **Techniques.** A palette (and shortcuts) for hammer-on, pull-off, slide
+   (to a fret / unpitched), bend (amount + release), vibrato, palm mute, fret
+   mute, harmonic, pinch harmonic, tap, slap, pop, accent, tremolo. Shown on
+   the tab and played back where alphaTab supports it. Check: screenshot of
+   each technique on a tab; save/reopen keeps them.
+3. **Tunings and capo.** Per-track tuning presets (Standard, Drop D, Eb
+   Standard, D Standard, Drop C, Open G/D/E...) plus custom, and capo.
+   Changing the tuning keeps the pitches and re-places frets (or keeps frets
+   and changes pitches, user's choice). Check: unit test; Drop D screenshot.
+4. **.NET Rocksmith helper.** `helpers/rocksmith/`: .NET 8 console app built
+   alongside the app (put the command in `CLAUDE.md`), talking to Electron
+   over JSON on stdin/stdout. Commands: read a .psarc, write a .psarc,
+   check an arrangement, find Wwise. Check: the helper reads the reference
+   file and lists its contents.
+5. **.psarc import.** File > Open accepts .psarc. Each arrangement (lead,
+   rhythm, bass) becomes a track with its tuning, capo, the hardest
+   difficulty level's notes, chords and techniques, sections and chord
+   names; Rocksmith's beat markers become our bars and tempo map. The song's
+   audio becomes a **backing track** that plays in sync with the cursor,
+   with its own volume and mute in the tracks panel (alphaTab's backing-track
+   / external media sync if it has one, otherwise sync an audio element to
+   the player position). Check: reference file imports; note count equals
+   the hardest level in the source XML; screenshot of the bass tab;
+   hidden, muted run shows the backing audio playing (pre-gain level above 0)
+   and in sync with the cursor at 30 s.
+6. **Audio for export.** Render the song to a WAV file offline (faster than
+   real time if alphaTab can, otherwise a muted real-time recording of the
+   pre-gain signal). Choose: full mix, mix without the parts being exported,
+   or a loaded recording (WAV/MP3/OGG/FLAC) with an offset to line it up.
+   Check: the rendered WAV length matches the song length within 50 ms.
+7. **Rocksmith export.** File > Export to Rocksmith: pick the guitar/bass
+   tracks and their arrangement type (Lead / Rhythm / Bass, one can be
+   Bonus); song info (title, artist, album, year, album art image); preview
+   start time; a default tone per arrangement. Writes the arrangement with
+   notes, chords + chord fingerings, techniques, beats, sections and phrases
+   (our section names mapped to Rocksmith's, with the required COUNT and END
+   phrases), auto hand positions and generated difficulty levels; runs the
+   helper's arrangement checks and shows any problems; converts the audio
+   with Wwise; writes `<Artist>_<Title>_v1_p.psarc`. Option: copy it straight
+   into Rocksmith 2014's `dlc` folder (find the Steam path, let Dan change
+   it). **If Wwise can't be found or fails, stop at that step**: keep the
+   arrangement files, the WAV and a DLC Builder project (.rs2dlc) so it can
+   be finished by hand, and report it. Check: export the Round 2 Rock bass and
+   guitar from Ode to Joy; the arrangement checks report no errors.
+8. **Round trip.** Import the exported .psarc back into the app: notes,
+   techniques, sections and tuning match what was exported (unit/e2e test).
+   Also export the reference file's bass after import and compare note counts.
+   Check: test passes; list any differences in the report.
 
+### For Dan to check (fill in at end of round)
+- Include exactly how to load the exported song in Rocksmith 2014.
 
 ## Next Steps (Do Not Start Yet)
-- **Round 3: tab editing + Rocksmith.** Edit notes and techniques on the tab;
-  import a .psarc (chart into the model, its audio as a backing track);
-  export guitar/bass parts as a .psarc via the .NET helper (backing audio
-  from the band mix or a loaded recording, difficulty levels generated).
-  Needs Wwise 2019/2021 on Dan's PC; ask him before this round starts.
-- **Round 4: composition.** Note entry on the staff, piano roll, chord
+- **Round 4: composition.** Piano roll, chord
   explorer (every way to play a chord, hear it, insert it), drum step
   sequencer.
 - **Round 5: production.** Effects (reverb, delay, distortion, EQ,

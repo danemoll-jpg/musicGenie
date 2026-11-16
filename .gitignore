@@ -7,3 +7,4 @@ test-results/
 .vite/
 src/renderer/public/font/
 src/renderer/public/soundfont/
+TestData/private/
