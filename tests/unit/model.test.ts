@@ -40,7 +40,7 @@ describe('model carries guitar data', () => {
     const piano = pianoSong();
     expect(piano.chordSymbols.length).toBeGreaterThan(0);
     expect(piano.tracks[0].staves.length).toBe(2);
-    const lyrics = piano.tracks[0].staves[0].measures[0].voices[0].beats.map((b) => b.lyric);
+    const lyrics = piano.tracks[0].staves[0].measures[0].voices[0].beats.map((b) => b.lyrics?.[0]);
     expect(lyrics[0]).toBe('Joy');
   });
 });

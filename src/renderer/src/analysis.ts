@@ -2,7 +2,7 @@
 // at a time in the background worker with progress and Cancel, temporary audio files.
 import type { MlModelStatus, MlProgress } from '../../preload';
 import {
-  addAudioTrack, addClip, addDrumTranscription, clipStartMs, addTranscribedTrack, defaultBar, emptySong, mediaDirFor, songGridFromBeats, PART_KINDS,
+  addAudioTrack, addClip, addDrumTranscription, placeWords, recToSongMs, clipStartMs, addTranscribedTrack, defaultBar, emptySong, mediaDirFor, songGridFromBeats, PART_KINDS,
   type AudioClip, type AudioNote, type DrumHitIn, type RocksmithExport, type Song, type Track,
 } from '../../model';
 import { engine } from './audio/engine';
@@ -228,7 +228,7 @@ export class Analysis {
     this.store.edit((s) => songGridFromBeats(s, this.recordingClip(s)!.clip, b.beats, b.downbeats, numerator), 'Beats in ' + numerator + '/4');
   }
 
-  private async mediaDir(): Promise<string> {
+  async mediaDir(): Promise<string> {
     const fp = this.store.state.filePath;
     if (fp) return mediaDirFor(fp);
     const { userData } = await window.mg.paths();
@@ -265,15 +265,18 @@ export class Analysis {
   }
 
   /** Item 4: transcribe an audio track's clip into a new note track. */
-  async transcribe(trackId: string, opts: { kind: string; grid: string; loose: boolean; minPitch?: number; maxPitch?: number; onsetThresh?: number; frameThresh?: number }) {
+  async transcribe(trackId: string, opts: { kind: string; grid: string; loose: boolean; minPitch?: number; maxPitch?: number; onsetThresh?: number; frameThresh?: number; refine?: false | { cents?: boolean; octaves?: boolean; lines?: boolean; onsets?: boolean; tuning?: boolean } }) {
     const rc = this.clipOf(trackId);
     if (!rc) throw new Error('That track has no audio clip.');
     if (!(await this.ensureModels(['basic-pitch']))) return null;
     const wav = await this.wavFor(rc.clip.file);
     const model = await this.modelFile('basic-pitch', 'nmp.onnx');
     const kind = PART_KINDS.find((k) => k.id === opts.kind) ?? PART_KINDS[0];
-    const r = await this.withJob('Audio to notes', () => window.mg.mlRun<{ notes: AudioNote[]; provider: string; inferMs: number }>('transcribe', {
-      wav, model, opts: {
+    // Round 7: tuning offset, bass octaves, guitar lines vs chords, attack timing, tuning (all on unless refine: false).
+    const part = kind.id === 'bass' || kind.id === 'guitar' || kind.id === 'lead' ? kind.id : 'other';
+    const refine = opts.refine === false ? undefined : { part, cents: true, octaves: true, lines: true, onsets: true, tuning: true, ...(opts.refine ?? {}) };
+    const r = await this.withJob('Audio to notes', () => window.mg.mlRun<{ notes: AudioNote[]; provider: string; inferMs: number; info: { cents?: number; tuning?: { name: string; tuning: number[] } } & Record<string, unknown> }>('transcribe', {
+      wav, model, refine, opts: {
         minPitch: opts.minPitch ?? kind.range[0] - 1, maxPitch: opts.maxPitch ?? kind.range[1] + 1, onsetThresh: opts.onsetThresh, frameThresh: opts.frameThresh,
         retrigger: kind.mono && kind.id !== 'bass' ? 'strict' : 'weak',
       },
@@ -281,12 +284,42 @@ export class Analysis {
     let id = '';
     let count = 0;
     this.store.edit((s) => {
-      const out = addTranscribedTrack(s, this.clipOf(trackId)!.clip, r.notes, { kind: opts.kind, grid: opts.grid, loose: opts.loose, sourceTrackId: trackId });
+      const out = addTranscribedTrack(s, this.clipOf(trackId)!.clip, r.notes, { kind: opts.kind, grid: opts.grid, loose: opts.loose, sourceTrackId: trackId, tuning: r.info?.tuning?.tuning, centOffset: r.info?.cents });
       id = out.id;
       count = out.notes;
       return out.song;
     }, 'Audio to notes');
-    return { trackId: id, notes: count, raw: r.notes, provider: r.provider, inferMs: r.inferMs };
+    return { trackId: id, notes: count, raw: r.notes, provider: r.provider, inferMs: r.inferMs, info: r.info };
+  }
+
+  /** Round 7 item 4: vocal stem (or any audio track) -> melody track (FCPE) + lyrics (Whisper). */
+  async vocals(trackId: string, opts: { grid: string; loose: boolean; lyrics: boolean }) {
+    const rc = this.clipOf(trackId);
+    if (!rc) throw new Error('That track has no audio clip.');
+    if (!(await this.ensureModels(opts.lyrics ? ['fcpe', 'whisper-base'] : ['fcpe']))) return null;
+    const wav = await this.wavFor(rc.clip.file);
+    const kind = PART_KINDS.find((k) => k.id === 'vocals')!;
+    const model = await this.modelFile('fcpe', 'fcpe.onnx');
+    const r = await this.withJob('Vocal melody', () => window.mg.mlRun<{ notes: AudioNote[]; centOffset: number; inferMs: number }>('voiceNotes', { wav, model, minPitch: kind.range[0] - 4, maxPitch: kind.range[1] + 4 }));
+    let w: { words: { word: string; start: number; end: number; prob: number }[]; inferMs: number } | null = null;
+    if (opts.lyrics) {
+      const [encoder, decoder, vocab] = await Promise.all(['encoder_model_quantized.onnx', 'decoder_model_quantized.onnx', 'vocab.json'].map((f) => this.modelFile('whisper-base', f)));
+      w = await this.withJob('Lyrics (speech to text)', () => window.mg.mlRun<{ words: { word: string; start: number; end: number; prob: number }[]; inferMs: number }>('whisper', { wav, encoder, decoder, vocab }));
+    }
+    let id = '';
+    let count = 0;
+    let placed = 0;
+    this.store.edit((s) => {
+      const clip = this.clipOf(trackId)!.clip;
+      const out = addTranscribedTrack(s, clip, r.notes, { kind: 'vocals', grid: opts.grid, loose: opts.loose, sourceTrackId: trackId, name: 'Vocal melody' });
+      id = out.id;
+      count = out.notes;
+      if (!w) return out.song;
+      const pw = placeWords(out.song, id, w.words.map((x) => ({ word: x.word, ms: recToSongMs(out.song, clip, x.start), endMs: recToSongMs(out.song, clip, x.end) })));
+      placed = pw.placed;
+      return pw.song;
+    }, 'Vocals to melody + lyrics');
+    return { trackId: id, notes: count, raw: r.notes, centOffset: r.centOffset, words: w?.words ?? [], placed, inferMs: r.inferMs + (w?.inferMs ?? 0) };
   }
 
   /** Item 5: drum stem -> drum track. */

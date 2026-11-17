@@ -7,11 +7,18 @@ import {
   type Techniques, type Track,
 } from '../model/types';
 import { barTicks } from '../model/timing';
+import { musicXmlKeepHyphens } from '../model/lyrics';
 
 const m = alphaTab.model;
 
 export function importWithAlphaTab(bytes: Uint8Array): Song {
   const settings = new alphaTab.Settings();
+  // MusicXML: alphaTab drops <syllabic>; keep the hyphens of split words in the syllable text.
+  const head = new TextDecoder().decode(bytes.subarray(0, 2000));
+  if (/<score-(partwise|timewise)|<\?xml/.test(head)) {
+    const text = new TextDecoder().decode(bytes);
+    if (/<syllabic>/.test(text)) bytes = new TextEncoder().encode(musicXmlKeepHyphens(text));
+  }
   const score = alphaTab.importer.ScoreLoader.loadScoreFromBytes(bytes, settings);
   return fromAlphaTabScore(score);
 }
@@ -130,7 +137,11 @@ function convertBeat(b: alphaTab.model.Beat, fretted: boolean): Beat {
   };
   if (b.hasTuplet) beat.duration.tuplet = { num: b.tupletNumerator, den: b.tupletDenominator };
   if (b.graceType !== m.GraceType.None) beat.grace = true;
-  if (b.lyrics?.length && b.lyrics[0]) beat.lyric = b.lyrics[0];
+  if (b.lyrics?.some((l) => l && l.trim())) {
+    const l = b.lyrics.map((x) => (x ?? '').trim());
+    while (l.length && !l[l.length - 1]) l.pop();
+    beat.lyrics = l;
+  }
   if (b.text) beat.text = b.text;
   if (!b.isRest) beat.notes = b.notes.filter((n) => n.isVisible || true).map((n) => convertNote(n, b, fretted));
   return beat;

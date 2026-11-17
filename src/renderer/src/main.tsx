@@ -17,7 +17,10 @@ import { engine } from './audio/engine';
 import { recorder } from './audio/recorder';
 import { PrintView } from './PrintView';
 import { Analysis } from './analysis';
+import { startAutoSing } from './singing';
+import { trackBank } from '../../model';
 import { installTestApiR6 } from './testApiR6';
+import { installTestApiR7 } from './testApiR7';
 import { analysisCtl, playerCtl } from './Round6';
 import './styles.css';
 
@@ -33,6 +36,7 @@ if (new URLSearchParams(location.search).get('print') === '1') {
   audioCtl.current = audio;
   const analysis = new Analysis(store);
   analysisCtl.current = analysis;
+  startAutoSing(store);
   const kbd = new KeyboardPiano(store, midi);
   kbdCtl.current = kbd;
   // Live notes (MIDI keyboard, keyboard piano, previews) play through the selected track's strip.
@@ -40,6 +44,12 @@ if (new URLSearchParams(location.search).get('print') === '1') {
     const t = store.state.song?.tracks[store.state.selTrack];
     return (t && engine.graph.strip(t.id)?.input) ?? null;
   };
+  liveSynth.trackBank = () => {
+    const s = store.state.song;
+    const t = s?.tracks[store.state.selTrack];
+    return s && t ? trackBank(s, t) : 0;
+  };
+  liveSynth.trackProgram = () => store.state.song?.tracks[store.state.selTrack]?.sound?.program ?? null;
 
   engine.keepAwake = () => recorder.state.open || midi.state.held.length > 0 || kbd.state.held.length > 0;
   createRoot(document.getElementById('root')!).render(<App store={store} midi={midi} onPlayer={(p, b) => { player = p; backing = b; playerCtl.current = p; }} />);
@@ -51,5 +61,6 @@ if (new URLSearchParams(location.search).get('print') === '1') {
   if (window.mg.flags.hidden) {
     installTestApi(store, () => player, () => backing, midi, audio, kbd);
     installTestApiR6(store, analysis, () => player);
+    installTestApiR7(store, analysis, () => player);
   }
 }

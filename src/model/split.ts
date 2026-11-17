@@ -92,7 +92,7 @@ function partStaves(track: Track, parts: Map<NoteAddress, SplitPart>, want: Spli
     for (const m of st.measures)
       for (const v of m.voices) {
         v.beats = v.beats.filter((b) => !b.grace || b.notes.length > 0);
-        if (want !== 'melody') for (const b of v.beats) delete b.lyric;
+        if (want !== 'melody') for (const b of v.beats) { delete b.lyric; delete b.lyrics; }
       }
   // Drop voices that are all rests (keep voice 0), then staves with no notes at all.
   for (const st of staves)

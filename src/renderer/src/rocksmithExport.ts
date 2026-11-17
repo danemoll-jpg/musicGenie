@@ -2,7 +2,7 @@
 // then the .NET helper writes XML, runs the arrangement checks, converts audio with Wwise and
 // builds the .psarc. If Wwise is missing or fails, it stops there and keeps everything (incl. a
 // DLC Builder project) so the song can be finished by hand.
-import { rocksmithArrangement, type RsArrangement, type RsExportReport } from '../../model/rocksmith';
+import { rocksmithVocals, rocksmithArrangement, type RsArrangement, type RsExportReport } from '../../model/rocksmith';
 import { songLengthMs } from '../../model/tempo';
 import type { RocksmithExport, Song } from '../../model/types';
 import { decodeRecording, place, renderMix, wavBytes, wavLengthMs } from './audio/render';
@@ -26,7 +26,7 @@ export interface RsExportResult {
   previewWav: string;
   xmlFiles: string[];
   issues: RsIssue[];
-  arrangements: { arrangement: string; xml: string; ddLevels: number }[];
+  arrangements: { arrangement: string; xml: string; ddLevels?: number; syllables?: number }[];
   reports: RsExportReport[];
   audio: { mode: RocksmithExport['audio']; wavMs: number; songMs: number; leadInMs: number; synthEndMs?: number; renderMs?: number };
 }
@@ -90,6 +90,7 @@ export async function exportRocksmith(
     audioWav: wavPath,
     previewStartMs: (s.previewStartMs ?? 0) + leadInMs,
     copyToDlc: s.copyToDlc || '',
+    vocals: s.vocals && song.tracks.some((t) => t.id === s.vocals!.trackId) ? rocksmithVocals(song, s.vocals.trackId, leadInMs, s.vocals.verse ?? 0) : null,
     arrangements: built.map((b, i) => ({ ...b.arrangement, bassPicked: b.arrangement.bassPicked, priority: s.arrangements[i].bonus ? 'Bonus' : 'Main' }) as RsArrangement),
   };
   const r = await window.mg.rs<Omit<RsExportResult, 'reports' | 'audio'>>('write', args);

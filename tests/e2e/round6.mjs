@@ -482,6 +482,11 @@ try {
 
   // ---------- 10: the download question, answered with the real buttons ----------
   if (want(10)) {
+    // The question only appears for a model that is not there yet: remove basic-pitch (0.23 MB; item 1
+    // and later items downloaded it) after stopping the worker that has it loaded.
+    await ev(page, () => window.mgTest.mlCancel());
+    await sleep(500);
+    rmSync(join(MODEL_PROFILE, 'models', 'basic-pitch'), { recursive: true, force: true });
     await ev(page, () => window.mgTest.mlAutoAccept(false));
     const clickIn = (label) => ev(page, (l) => {
       const b = [...document.querySelectorAll('[data-testid="confirm"] button')].find((x) => x.textContent === l);

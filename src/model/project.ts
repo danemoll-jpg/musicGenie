@@ -1,4 +1,5 @@
 // .mgproj project files: JSON with a schemaVersion.
+import { normalizeLyrics } from './lyrics';
 import type { Song } from './types';
 
 // v2 (Round 2): song.playback, song.band, track.generated, track.derived, chordSymbols[].source.
@@ -8,8 +9,11 @@ import type { Song } from './types';
 //     track.audio (audio clips; media in <name>_media next to the project).
 // v6 (Round 6): song.recording (which audio clip is the original recording), track.analysis
 //     (stem / transcription tags), track.omr (pages/measures the sheet-music reader was unsure of).
+// v7 (Round 7): beat.lyrics (verses, hyphens, "_" = held), track.voice (singing settings + rendered take),
+//     track.sound (sound library: SoundFont / SFZ per track), song.describe (the "Describe a song" plan).
+//     v6 and older beat.lyric moves into beat.lyrics[0] on load.
 // Older files load as-is (every addition is optional).
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export interface ProjectFile {
   schemaVersion: number;
@@ -57,5 +61,5 @@ export function parseProject(text: string): Song {
       throw new ProjectLoadError(`This project file is damaged (track "${t.name}" has the wrong number of measures).`);
     }
   }
-  return song;
+  return normalizeLyrics(song);
 }

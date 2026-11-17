@@ -10,6 +10,7 @@ import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'elect
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, normalize } from 'node:path';
 import { unzipStore, zipStore } from './zip';
+import { claudeAvailable, describeWithClaude } from './describe';
 import { RocksmithHelper } from './rocksmithHelper';
 import { MlHost, downloadModel, modelPath, modelStatus, modelsDir } from './ml';
 import { omrCancel, omrInstall, omrRun, omrStatus } from './omr';
@@ -52,6 +53,8 @@ interface AppSettings {
   fxPresets?: unknown[];
   audioInput?: string | null;
   latencyMs?: number;
+  /** Round 7: the sound library (SoundFonts and SFZ instruments the user added). */
+  soundLibrary?: { file: string; name: string; kind: 'sf2' | 'sfz' }[];
 }
 const settingsFile = () => join(app.getPath('userData'), 'settings.json');
 function readSettings(): AppSettings {
@@ -343,6 +346,9 @@ ipcMain.handle('capture', async () => {
 // ---------- Round 6: models + analysis worker ----------
 const ml = new MlHost((ch, msg) => win?.webContents.send(ch, msg));
 ipcMain.handle('ml-models', () => modelStatus());
+// Round 7: "Describe a song" with Claude (only with ANTHROPIC_API_KEY in the environment).
+ipcMain.handle('describe-available', () => claudeAvailable());
+ipcMain.handle('describe-claude', (_e, text: string) => describeWithClaude(String(text)));
 ipcMain.handle('ml-download', (_e, id: string) => downloadModel(id, (ch, msg) => win?.webContents.send(ch, msg)));
 ipcMain.handle('ml-model-path', (_e, id: string, file: string) => modelPath(id, file));
 ipcMain.handle('ml-run', (_e, cmd: string, args: unknown) => ml.run(cmd, args));

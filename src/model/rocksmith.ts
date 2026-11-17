@@ -8,7 +8,8 @@ import { buildMeasures, trackEvents, type NoteEvent } from './events';
 import { assignChord } from './fretting';
 import { findInstrument, toInstrumentRef } from './instruments';
 import { tempoPoints, msAtTick, songEndTick } from './tempo';
-import { barStartTicks, barTicks } from './timing';
+import { barStartTicks, barTicks, durationTicks } from './timing';
+import { lyricEvents } from './lyrics';
 import {
   PPQ, type BarHeader, type BendPoint, type ChordSymbol, type RsArrangementType, type Section, type Song,
   type TempoChange, type Techniques, type Track,
@@ -85,6 +86,16 @@ export interface RsReadResult {
   albumArt?: string;
   previewStart?: number | null;
   arrangements: RsArrangement[];
+  /** Round 7: the vocals arrangement (lyrics), if the file has one. */
+  vocals?: RsVocal[] | null;
+}
+
+/** One Rocksmith vocal: time/length in ms, MIDI note, lyric ("Freu-" joins the next syllable, "+" ends a line). */
+export interface RsVocal {
+  time: number;
+  length: number;
+  lyric: string;
+  note: number;
 }
 
 // Note mask bits (Rocksmith2014.XML NoteMask / ChordMask).
@@ -138,9 +149,11 @@ const GRID = PPQ / 8; // 32nd notes
 
 export interface RsImportReport {
   arrangements: { name: string; notes: number; chords: number; skippedBeforeFirstBeat: number; moved: number }[];
+  /** Round 7: the vocals arrangement, if any. */
+  vocals?: { syllables: number; lines: number };
 }
 
-interface BeatGrid {
+export interface BeatGrid {
   times: number[];
   /** Time -> absolute tick (each ebeat is one beat of its bar). */
   tickAt: (ms: number) => number;
@@ -346,6 +359,90 @@ function trackFromRs(song: Song, arr: RsArrangement, grid: BeatGrid, id: string,
   return { track, events, timed, skipped, moved, chords: arr.chords.length };
 }
 
+/** Rocksmith vocals -> a "Vocals" track (choir sound) with one syllable per note, lines kept as "+"-free text. */
+export function vocalsTrackFromRs(song: Song, vocals: RsVocal[], grid: BeatGrid, id: string): { track: Track; syllables: number; lines: number } | null {
+  const q = (ms: number) => Math.round(grid.tickAt(ms) / GRID) * GRID;
+  const events: NoteEvent[] = [];
+  const lyricAt = new Map<number, string>();
+  let lines = 0;
+  for (const v of [...vocals].sort((a, b) => a.time - b.time)) {
+    let start = q(v.time);
+    if (start < 0) continue;
+    while (lyricAt.has(start)) start += GRID;
+    const end = Math.max(start + GRID, q(v.time + Math.max(1, v.length)));
+    const pitch = v.note >= 24 && v.note <= 108 ? v.note : 60;
+    let text = v.lyric.trim();
+    if (text.endsWith('+')) { lines++; text = text.slice(0, -1); }
+    lyricAt.set(start, text || '_');
+    events.push({ start, dur: end - start, pitch, velocity: 90, staff: 0, voice: 0 });
+  }
+  if (!events.length) return null;
+  // Overlaps would become chords: cut each note at the next one's start.
+  for (let i = 0; i + 1 < events.length; i++) events[i].dur = Math.max(GRID, Math.min(events[i].dur, events[i + 1].start - events[i].start));
+  const c = findInstrument('choir')!;
+  const track: Track = {
+    id, name: 'Vocals',
+    instrument: toInstrumentRef(c),
+    mixer: { volume: 0.6, pan: 0, mute: true, solo: false },
+    display: { visible: true, mode: 'notation' },
+    staves: [{ clef: 'treble', measures: buildMeasures(song, events, {}) }],
+  };
+  // Syllables onto the notes at their start ticks.
+  const starts = barStartTicks(song);
+  track.staves[0].measures.forEach((m, bi) => {
+    let t = starts[bi];
+    for (const b of m.voices[0]?.beats ?? []) {
+      const l = !b.grace && b.notes.length && !b.notes.every((n) => n.tieFromPrevious) ? lyricAt.get(t) : undefined;
+      if (l) b.lyrics = [l];
+      if (!b.grace) t += durationTicks(b.duration);
+    }
+  });
+  return { track, syllables: events.length, lines };
+}
+
+// Characters Rocksmith's default lyrics font has (Rocksmith2014.NET VocalsChecker.LyricsCharset).
+const RS_LYRIC_CHARS = new Set(Array.from(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_abcdefghijklmnopqrstuvwxyz{|}~¡¢¥¦§¨ª«°²³´•¸¹º»¼½¾¿ÀÁÂÄÅÆÇÈÉÊËÌÎÏÑÒÓÔÖØÙÚÛÜÞßàáâäåæçèéêëìíîïñòóôöøùúûüŒœŠšž„…€™"));
+
+/** A syllable in characters the game's lyrics font can show (curly quotes, dashes, other accents mapped). */
+export function rsLyricText(s: string): string {
+  const mapped = s.replace(/[‘’‚‛′]/g, "'").replace(/[“”‟″]/g, '"').replace(/[–—]/g, '-').replace(/ /g, ' ');
+  let out = '';
+  for (const ch of mapped) {
+    if (RS_LYRIC_CHARS.has(ch)) out += ch;
+    else {
+      const base = ch.normalize('NFD').replace(/[̀-ͯ]/g, '');
+      out += [...base].filter((c) => RS_LYRIC_CHARS.has(c)).join('');
+    }
+  }
+  // 47 bytes is the game's limit per syllable.
+  while (new TextEncoder().encode(out).length > 46) out = out.slice(0, -1);
+  return out;
+}
+
+/**
+ * Lyrics of a track -> Rocksmith vocals (times in ms, after `leadInMs`). Lines end ("+") at the end
+ * of a sentence or clause (. , ; : ! ?), before a gap of a beat or more, or after 8 words.
+ */
+export function rocksmithVocals(song: Song, trackId: string, leadInMs: number, verse = 0): RsVocal[] {
+  const t = song.tracks.find((x) => x.id === trackId);
+  if (!t) return [];
+  const ev = lyricEvents(song, t, verse);
+  const out: RsVocal[] = [];
+  let words = 0;
+  ev.forEach((e, i) => {
+    const next = ev[i + 1];
+    const text = rsLyricText(e.text);
+    if (!text && !e.hyphen) return;
+    if (!e.hyphen) words++;
+    const gap = next ? next.tick - (e.tick + e.dur) : Infinity;
+    const lineEnd = !e.hyphen && (!next || /[.,;:!?]$/.test(text) || gap >= PPQ || words >= 8);
+    if (lineEnd) words = 0;
+    const pitch = Math.round(e.notes.reduce((a, n) => a + n.pitch * n.dur, 0) / Math.max(1, e.notes.reduce((a, n) => a + n.dur, 0)));
+    out.push({ time: Math.round(leadInMs + e.ms), length: Math.max(1, Math.round(e.durMs)), lyric: (text || '-') + (e.hyphen ? '-' : lineEnd ? '+' : ''), note: pitch });
+  });
+  return out;
+}
+
 /** A whole Rocksmith song (all instrumental arrangements) -> Song. */
 export function songFromRocksmith(r: RsReadResult): { song: Song; report: RsImportReport } {
   const arrs = r.arrangements.filter((a) => a.beats?.length);
@@ -400,13 +497,21 @@ export function songFromRocksmith(r: RsReadResult): { song: Song; report: RsImpo
       song.chordSymbols = cs;
     }
   });
+  if (r.vocals?.length) {
+    const v = vocalsTrackFromRs(song, r.vocals, grid, `t${song.tracks.length + 1}`);
+    if (v) {
+      song.tracks.push(v.track);
+      report.vocals = { syllables: v.syllables, lines: v.lines };
+    }
+  }
   if (r.audioOgg || r.audioWav) {
     song.backing = { name: 'Song audio', path: (r.audioOgg || r.audioWav)!, offsetMs: firstBeatMs, volume: 0.8, mute: false };
   }
   song.rocksmith = {
     title: r.title, artist: r.artist, album: r.album, year: r.year || undefined,
     albumArt: r.albumArt || undefined, previewStartMs: r.previewStart ?? undefined,
-    arrangements: song.tracks.map((t) => ({ trackId: t.id, type: t.rocksmith!.arrangement })),
+    arrangements: song.tracks.filter((t) => t.rocksmith).map((t) => ({ trackId: t.id, type: t.rocksmith!.arrangement })),
+    ...(song.tracks.some((t) => t.name === 'Vocals' && !t.rocksmith) ? { vocals: { trackId: song.tracks.find((t) => t.name === 'Vocals' && !t.rocksmith)!.id } } : {}),
     audio: song.backing ? 'file' : 'mix',
     audioFile: song.backing?.path, audioOffsetMs: song.backing?.offsetMs,
   };

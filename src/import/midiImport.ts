@@ -6,6 +6,7 @@ import { Midi } from '@tonejs/midi';
 import { newTrack } from '../model/factory';
 import { PPQ, type BarHeader, type Beat, type Measure, type Note, type Song, type Staff } from '../model/types';
 import { barTicks, splitTicks } from '../model/timing';
+import { lyricSlots } from '../model/lyrics';
 
 const GRID = PPQ / 4; // 16th note
 
@@ -104,11 +105,36 @@ export function importMidi(bytes: Uint8Array, fileName = 'MIDI file'): Song {
     return newTrack(`t${i + 1}`, name, program, percussion, staves);
   });
 
-  return {
+  const song: Song = {
     title: midi.header.name?.trim() || fileName.replace(/\.(mid|midi)$/i, ''),
     artist: '', album: '', composer: '',
     bars, tempos, sections: [], chordSymbols: [], tracks,
   };
+  attachMidiLyrics(song, midi.header.meta.filter((e) => e.type === 'lyrics').map((e) => ({ tick: q(e.ticks), text: e.text })));
+  return song;
+}
+
+/** Lyric events (verse 1) go onto the track whose note starts match them best (first staff, voice 1). */
+function attachMidiLyrics(song: Song, lyr: { tick: number; text: string }[]) {
+  const clean = lyr.map((l) => ({ tick: l.tick, text: l.text.replace(/[\r\n/\\]+/g, ' ').trim() })).filter((l) => l.text);
+  if (!clean.length) return;
+  let best: { track: Song['tracks'][0]; hits: number } | null = null;
+  for (const track of song.tracks) {
+    if (track.instrument.percussion) continue;
+    const slots = new Set(track.staves.flatMap((_, si) => lyricSlots(song, track, si)).map((s) => s.tick));
+    const hits = clean.filter((l) => slots.has(l.tick)).length;
+    if (!best || hits > best.hits) best = { track, hits };
+  }
+  if (!best || !best.hits) return;
+  // Staff 1 first; a split piano's low notes (bass staff) get the rest.
+  const slotAt = new Map<number, ReturnType<typeof lyricSlots>[0]>();
+  best.track.staves.forEach((_, si) => { for (const s of lyricSlots(song, best!.track, si)) if (!slotAt.has(s.tick)) slotAt.set(s.tick, s); });
+  for (const l of clean) {
+    const s = slotAt.get(l.tick);
+    if (!s) continue;
+    const b = best.track.staves[s.staff].measures[s.bar].voices[s.voice].beats[s.beat];
+    b.lyrics = [l.text];
+  }
 }
 
 function keyToFifths(key: string, scale: string): number {

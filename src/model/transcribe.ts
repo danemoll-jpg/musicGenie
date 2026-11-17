@@ -67,6 +67,9 @@ export interface TranscribeOptions {
   sourceTrackId?: string;
   /** Add chord symbols from the new notes (guitar/piano). Default true for chordal parts. */
   chords?: boolean;
+  /** Round 7: detected tuning (lowest string first) and how far the recording is from A440 (cents). */
+  tuning?: number[];
+  centOffset?: number;
 }
 
 /** Notes (seconds in the recording) -> events on the song's tick grid. */
@@ -160,6 +163,8 @@ export function addTranscribedTrack(song: Song, clip: { bar: number; tick: numbe
     t.display.mode = kind.id === 'bass' ? 'tab' : 'both';
   }
   t.analysis = { kind: 'transcription', sourceTrackId: opts.sourceTrackId, grid: opts.grid, loose: opts.loose };
+  if (opts.tuning && t.tuning && opts.tuning.length === t.tuning.length) t.tuning = opts.tuning.slice();
+  if (opts.centOffset && Math.abs(opts.centOffset) >= 5 && t.tuning) t.rocksmith = { arrangement: kind.id === 'bass' ? 'Bass' : 'Lead', centOffset: Math.round(opts.centOffset) };
   const events = audioNotesToEvents(out, clip, notes, { grid: opts.grid, loose: opts.loose, range: kind.range, mono: kind.mono });
   writeTrack(out, t, events);
   // Bars with no notes still need a rest measure.

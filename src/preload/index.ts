@@ -18,6 +18,8 @@ export interface AppSettings {
   fxPresets?: unknown[];
   audioInput?: string | null;
   latencyMs?: number;
+  /** Round 7: the sound library (SoundFonts and SFZ instruments the user added). */
+  soundLibrary?: { file: string; name: string; kind: 'sf2' | 'sfz' }[];
 }
 
 // Read synchronously so the renderer knows about --mute before any audio code runs.
@@ -61,6 +63,9 @@ const api = {
     ipcRenderer.invoke('print-pdf', args),
   printJob: (): Promise<unknown> => ipcRenderer.invoke('print-job'),
   printReady: (): void => ipcRenderer.send('print-ready'),
+  // ----- Round 7 -----
+  describeAvailable: (): Promise<boolean> => ipcRenderer.invoke('describe-available'),
+  describeClaude: (text: string): Promise<{ plan: unknown; model: string }> => ipcRenderer.invoke('describe-claude', text),
   // ----- Round 6 -----
   mlModels: (): Promise<MlModelStatus[]> => ipcRenderer.invoke('ml-models'),
   mlDownload: (id: string): Promise<void> => ipcRenderer.invoke('ml-download', id),

@@ -12,6 +12,7 @@ import {
   type RocksmithExport, type RsImportReport, type RsReadResult, type Song, type StyleId,
   FX_DEFS, newEffect, presetEffects, songMix, absolutizeMedia, mediaDirFor, mediaFiles, relativizeMedia,
   type AutoLane, type Effect, type FxPreset, type FxType, type SongMix, type Track,
+  planToChart, planBand, type SongPlan,
 } from '../../model';
 import type { RsExportResult } from './rocksmithExport';
 
@@ -102,6 +103,8 @@ export interface AppState {
   explore: string | null;
   /** New / edit chord chart dialog. */
   chart: { open: boolean; editing: boolean };
+  /** Round 7: New > Describe a song dialog. */
+  describeOpen: boolean;
   /** Key / time / tempo changes dialog (bar to start at). */
   changesBar: number | null;
   /** Saved drum patterns (userData/settings.json). */
@@ -114,7 +117,7 @@ export interface AppState {
   kbdPiano: boolean;
 }
 
-export type DockTab = 'roll' | 'drums' | 'chords' | 'prog' | 'midi' | 'mixer' | 'auto' | 'audio' | 'rec';
+export type DockTab = 'roll' | 'drums' | 'chords' | 'prog' | 'midi' | 'mixer' | 'auto' | 'audio' | 'rec' | 'lyrics' | 'sounds';
 
 type Listener = (s: AppState) => void;
 
@@ -129,7 +132,7 @@ export class Store {
     band: null, confirm: null, chordPicker: null, soundFontPath: null, info: null,
     editMode: false, cursor: null, hasClip: false, busy: null, rsImport: null,
     rsExport: { open: false, running: false, step: null, result: null, error: null }, tuningTrack: null,
-    selTrack: 0, dock: null, explore: null, chart: { open: false, editing: false }, changesBar: null, drumPatterns: [],
+    selTrack: 0, dock: null, explore: null, chart: { open: false, editing: false }, describeOpen: false, changesBar: null, drumPatterns: [],
     fxPresets: [], exportOpen: false, kbdPiano: false,
   };
   private clip: Clip | null = null;
@@ -674,6 +677,22 @@ export class Store {
   }
   openChart(open: boolean, editing = false) {
     this.set({ chart: { open, editing } });
+  }
+  openDescribe(open: boolean) {
+    this.set({ describeOpen: open });
+  }
+  /** New > Describe a song: plan -> chord chart -> song -> band (lineup, style, feel from the plan). */
+  createFromPlan(plan: SongPlan, seed = 1): string[] {
+    const chart = planToChart(plan);
+    const { song, errors } = chartToSong(chart, { title: plan.title, bpm: plan.bpm });
+    song.chart = { text: chart };
+    const { band, swing } = planBand(plan, defaultBand(plan.style, undefined, seed));
+    const full = generateBand(song, band);
+    full.playback = { ...(full.playback ?? { swing: 0 }), swing };
+    full.describe = { plan: structuredClone(plan) };
+    this.load(full, null, plan.title || 'New song');
+    this.set({ describeOpen: false });
+    return errors;
   }
   /** New > Chord chart: build the song from the chart and generate the band in the chosen style. */
   createChart(text: string, opts: { title: string; bpm: number; style: StyleId; seed?: number }): string[] {

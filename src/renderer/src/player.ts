@@ -253,14 +253,22 @@ export class ScorePlayer {
   }
 
   /** Load a SoundFont (bytes of a .sf2/.sf3), or the bundled default with null. */
-  setSoundFont(bytes: Uint8Array | null, name: string) {
+  setSoundFont(bytes: Uint8Array | null, name: string, extras: Uint8Array[] = []) {
     const wasPlaying = this.status.playing;
     if (wasPlaying) this.api.pause();
     this.api.resetSoundFonts();
     this.soundFontRequested = true;
     if (bytes) this.api.loadSoundFont(bytes, false);
     else this.api.loadSoundFont(this.defaultSoundFontUrl, false);
-    this.update({ soundFont: name });
+    // Round 7: sound-library files (banks moved) after the main one.
+    for (const x of extras) this.api.loadSoundFont(x, true);
+    this.update({ soundFont: name + (extras.length ? ` + ${extras.length} library` : '') });
+  }
+
+  /** The bundled default SoundFont's bytes (fetched once). */
+  async defaultSoundFontBytes(): Promise<Uint8Array> {
+    const r = await fetch(this.defaultSoundFontUrl);
+    return new Uint8Array(await r.arrayBuffer());
   }
 
   /** Wait until n SoundFont loads have finished in total. */

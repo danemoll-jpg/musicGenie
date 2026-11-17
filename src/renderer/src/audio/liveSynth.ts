@@ -35,10 +35,23 @@ export class LiveSynth {
   /** Notes started (tests read this to see that a preview really played). */
   notesPlayed = 0;
 
+  /** Round 7: sound-library SoundFonts appended after the main one (banks already moved). */
+  private extras: Uint8Array[] = [];
+  /** Bank of the selected track's sound (library sounds live in their own banks). */
+  trackBank: () => number = () => 0;
+  /** Program of the selected track's library sound (overrides the caller's program when its bank is used). */
+  trackProgram: () => number | null = () => null;
+
   /** Use this SoundFont (bytes) from now on. */
   setSoundFont(bytes: Uint8Array | null, name: string) {
     this.soundFont = bytes;
     this.soundFontName = name;
+    this.tsf = null;
+    this.loading = null;
+  }
+
+  setExtras(list: Uint8Array[]) {
+    this.extras = list;
     this.tsf = null;
     this.loading = null;
   }
@@ -74,17 +87,18 @@ export class LiveSynth {
     };
     const synth = new alphaTab.synth.AlphaSynth(output as unknown as alphaTab.synth.ISynthOutput, 100);
     synth.loadSoundFont(bytes, false);
+    for (const x of this.extras) synth.loadSoundFont(x, true);
     this.synth = synth;
     this.tsf = (synth as unknown as { synthesizer: Tsf }).synthesizer;
     this.loadPresets();
   }
 
   private loadPresets() {
-    const hydra = this.synth?.loadedSoundFonts?.[0];
-    if (!hydra || !this.tsf) return;
+    const hydras: unknown[] = this.synth?.loadedSoundFonts ?? [];
+    if (!hydras.length || !this.tsf) return;
     const keys = new Set<number>();
     for (let k = 24; k <= 90; k++) keys.add(k);
-    this.tsf.loadPresets(hydra, this.programs.size ? this.programs : new Set([0]), keys, false);
+    hydras.forEach((h, i) => this.tsf!.loadPresets(h, this.programs.size ? this.programs : new Set([0]), keys, i > 0));
   }
 
   private render(e: AudioProcessingEvent) {
@@ -122,12 +136,14 @@ export class LiveSynth {
     this.reroute();
     engine.wake();
     if (this.ctx?.state === 'suspended') await this.ctx.resume();
+    const bank = percussion ? 128 : this.trackBank();
+    if (!percussion && bank) program = this.trackProgram() ?? program;
     if (!percussion && !this.programs.has(program)) {
       this.programs.add(program);
       this.loadPresets();
     }
     const ch = percussion ? 9 : 0;
-    if (percussion) tsf.channelSetBank(ch, 128);
+    tsf.channelSetBank(ch, bank);
     tsf.channelSetPresetNumber(ch, percussion ? 0 : program, percussion);
     tsf.channelSetMixVolume(ch, 1);
     return { tsf, ch };

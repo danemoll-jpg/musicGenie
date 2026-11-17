@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { hashOf, INSTRUMENT_GROUPS, INSTRUMENTS, STYLES, type DisplayMode, type Track } from '../../model';
+import { hashOf, librarySoundFiles, INSTRUMENT_GROUPS, INSTRUMENTS, STYLES, type DisplayMode, type Track } from '../../model';
 import { BackingPlayer } from './audio/backing';
 import { BandPanel } from './BandPanel';
 import { editorKey } from './editor';
@@ -10,7 +10,9 @@ import { ChangesDialog, ChartDialog, Dock, HarmonyMenu, KbdPianoToggle } from '.
 import { ExportDialog } from './Round5';
 import { JobBar } from './Round6';
 import { ReviewView } from './Review';
+import { DescribeDialog } from './Round7';
 import { liveSynth } from './audio/liveSynth';
+import { songExtras } from './soundLib';
 import type { MidiController } from './midi';
 import type { AppState, Store } from './store';
 
@@ -27,7 +29,7 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
   const [showBand, setShowBand] = useState(true);
   const [newMenu, setNewMenu] = useState(false);
   const [songMenu, setSongMenu] = useState(false);
-  const loadedSoundFont = useRef<string | null>(null);
+  const loadedSoundFont = useRef<string | null>('#');
   const backingRef = useRef<BackingPlayer | null>(null);
 
   useEffect(() => {
@@ -54,20 +56,29 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
   }, [player, state.editMode]);
 
   // SoundFont: load the user's file when chosen, the built-in one when cleared.
+  // Round 7: plus the sound-library files the song's tracks use (banks moved, appended).
+  const extrasKey = state.song ? librarySoundFiles(state.song).join('|') : '';
   useEffect(() => {
     if (!player) return;
     const want = state.soundFontPath;
-    if (want === loadedSoundFont.current) return;
-    loadedSoundFont.current = want;
-    if (want) {
-      window.mg.readFile(want)
-        .then((f) => { player.setSoundFont(f.bytes, f.name); liveSynth.setSoundFont(f.bytes, f.name); })
-        .catch((e) => store.showError('Could not load the SoundFont: ' + (e as Error).message));
-    } else {
-      player.setSoundFont(null, DEFAULT_SOUNDFONT);
-      liveSynth.setSoundFont(null, DEFAULT_SOUNDFONT);
-    }
-  }, [player, state.soundFontPath]);
+    const key = (want ?? '') + '#' + extrasKey;
+    if (key === loadedSoundFont.current) return;
+    loadedSoundFont.current = key;
+    void (async () => {
+      try {
+        const main = want ? await window.mg.readFile(want) : null;
+        const mainBytes = async () => main?.bytes ?? (await player.defaultSoundFontBytes());
+        const { extras, missing } = extrasKey && store.state.song ? await songExtras(store.state.song, mainBytes) : { extras: [], missing: [] };
+        if (missing.length) store.showError('Sound library file not found (those tracks use the main SoundFont): ' + missing.join(', '));
+        const bytes = main ? main.bytes : extras.length ? await mainBytes() : null;
+        player.setSoundFont(bytes, main?.name ?? DEFAULT_SOUNDFONT, extras);
+        liveSynth.setSoundFont(bytes, main?.name ?? DEFAULT_SOUNDFONT);
+        liveSynth.setExtras(extras);
+      } catch (e) {
+        store.showError('Could not load the SoundFont: ' + (e as Error).message);
+      }
+    })();
+  }, [player, state.soundFontPath, extrasKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Click a chord symbol in the score -> chord picker.
   useEffect(() => {
@@ -155,6 +166,7 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
                 <button onClick={() => { setNewMenu(false); store.newSong('guitar'); }}>Guitar song (6 strings, tab + notation)</button>
                 <button onClick={() => { setNewMenu(false); store.newSong('bass'); }}>Bass song (4 strings, tab)</button>
                 <button onClick={() => { setNewMenu(false); store.openChart(true); }} data-testid="new-chart">Chord chart… (type chords, the band plays)</button>
+                <button onClick={() => { setNewMenu(false); store.openDescribe(true); }} data-testid="new-describe">Describe a song… (type it in words)</button>
               </div>
             )}
           </div>
@@ -233,6 +245,7 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
       <TuningDialog state={state} store={store} />
       <RocksmithDialog state={state} store={store} player={player} />
       <ChartDialog state={state} store={store} />
+      <DescribeDialog state={state} store={store} />
       <ChangesDialog state={state} store={store} />
       <ExportDialog state={state} store={store} player={player} />
       <div className="main">

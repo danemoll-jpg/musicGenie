@@ -34,6 +34,8 @@ export interface Song {
   mix?: SongMix;
   /** Schema v6: the original recording this song was made from (an audio clip on an audio track). */
   recording?: { trackId: string; clipId: string };
+  /** Schema v7: the "Describe a song" plan this song was built from. */
+  describe?: { plan: import('./describe').SongPlan; text?: string; by?: string };
 }
 
 export interface BackingTrack {
@@ -65,6 +67,8 @@ export interface RocksmithExport {
   audioOffsetMs?: number;
   /** Copy the finished .psarc into this Rocksmith dlc folder. */
   copyToDlc?: string;
+  /** Round 7: export this track's lyrics (verse, 0-based) as the vocals arrangement. */
+  vocals?: { trackId: string; verse?: number };
 }
 
 export interface Playback {
@@ -189,6 +193,42 @@ export interface Track {
   analysis?: TrackAnalysis;
   /** Schema v6: read from sheet music: places the reader was unsure about. */
   omr?: { issues: { page: number; bar?: number; text: string }[] };
+  /** Schema v7: this audio track is a sung rendering of another track's notes + lyrics. */
+  voice?: VoiceTag;
+  /** Schema v7: the sound library sound this track plays with (missing = the song's SoundFont). */
+  sound?: TrackSound;
+}
+
+export interface VoiceSettings {
+  vibratoCents: number;
+  vibratoHz: number;
+  dynamics: number;
+  breath: number;
+  gender: number;
+  steps: number;
+}
+
+export interface VoiceTag {
+  /** The melody track that is sung. */
+  sourceTrackId: string;
+  verse: number;
+  /** Singing engine + voicebank, e.g. "diffsinger:qixuan". */
+  engine: string;
+  settings: VoiceSettings;
+  /** Hash of what was sung (notes, lyrics, tempo, settings) when it was rendered. */
+  renderedHash?: string;
+  /** Re-render automatically after edits. */
+  auto?: boolean;
+}
+
+export interface TrackSound {
+  /** Library file: .sf2 / .sf3 / .sfz (absolute path). */
+  file: string;
+  /** Preset (bank/program) in that file; for SFZ always 0/0. */
+  bank: number;
+  program: number;
+  /** Shown name. */
+  name: string;
 }
 
 export interface TrackAnalysis {
@@ -252,6 +292,9 @@ export interface Beat {
   duration: Duration;
   notes: Note[];
   grace?: boolean;
+  /** Round 7: lyrics, one syllable per verse (index 0 = verse 1). "Freu-" = the word continues; "_" = held (melisma). */
+  lyrics?: string[];
+  /** Before format v7: verse 1 only. Moved into `lyrics` on load. */
   lyric?: string;
   text?: string;
 }

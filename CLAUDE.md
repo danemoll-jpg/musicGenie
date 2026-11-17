@@ -37,7 +37,24 @@ parts as Rocksmith 2014 custom songs. Full vision and roadmap:
     band-energy rules (`src/ml/drums.ts`), no ML.
   - Audiveris 5.11.0 (sheet music from PDF/images): **AGPL-3.0**, run as a separate program
     (never linked); the official windowsConsole MSI bundles its own Java runtime.
-  - Later: OpenUtau/DiffSinger or Synthesizer V export (singing).
+  - **Singing (Round 7): DiffSinger** run by our own host code (`src/ml/sing.ts`) on onnxruntime-node.
+    Voicebank **Qixuan v2.7.0** (OpenVPI / yqzhishen, GitHub release zip, 420 MB): its Terms of Use
+    allow new inference programs and any use of the output, but published songs must credit
+    "绮萱 (Qixuan)" and "DiffSinger" and be marked as AI-made; no violent/sexual/political/religious
+    content; the model must not be modified; outputs must not be used as training data; redistribution
+    only whole, unmodified, free (so the app downloads it, never bundles it). Vocoder **OpenVPI
+    PC-NSF-HiFiGAN 44.1k hop512 128bin 2025.02** (`.oudep` release asset, 53 MB): **CC BY-NC-SA 4.0**
+    (non-commercial). Other banks were rejected: SPORE (CC BY-NC-ND variant, "UTAU-like synths only"),
+    LUNAI (forbids porting to other engines). Fallback exports: `.ustx` (OpenUtau, MIT) and `.svp`.
+  - **FCPE** pitch tracker (vocal melody): **MIT** (CNChTu/FCPE; ONNX tuneperfect/fcpe-onnx @f99224c, 48 MB).
+  - **Whisper base** (lyrics from vocals): OpenAI code + weights **MIT**; ONNX export
+    onnx-community/whisper-base_timestamped @608c49e (quantized encoder 23 MB + decoder 53 MB, with
+    cross-attentions for word timings).
+  - **Claude** ("Describe a song", optional): `@anthropic-ai/sdk` 1.9.0 (MIT) in the main process,
+    model `claude-opus-5-5`, only when `ANTHROPIC_API_KEY` is in the environment (never stored).
+  - Sound library: nothing bundled. Recommended downloads (Dan's choice): MuseScore General (MIT),
+    FluidR3 GM (MIT), Salamander Grand (CC BY 3.0), VSCO-2 CE and VCSL (CC0), Virtual Playing
+    Orchestra (mixed CC, link only).
 
 ## Code Style & Architecture
 - **One music model is the source of truth** (`src/model/`). Song -> tracks
@@ -101,6 +118,12 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   `--clean-models` deletes it. Our test songs are rendered once into `test-results/r6-fixtures/`
   (mix + each part + truth JSON). Items 2/4/7 also benchmark the private Hüsker Dü file
   (skipped without it; its derived files are deleted).
+- Round 7 app checks: `npm run e2e:r7` (packaged) / `npm run e2e:r7:dev`; report
+  `test-results/report-round7.json`, benchmark `test-results/r7-5-benchmark.json`. Sound check: item 3
+  only (8 s of the sung Ode to Joy); skip with `--no-sound-check`. Item 5 reads 12 official songs in
+  place from `E:\Rocksmith2014\dlc` (read-only) + every .psarc in `TestData/private/`; `--songs=N`
+  limits the official list; their audio, stems and transcriptions are deleted after each song
+  (~2.5 min per song). Shares the Round 6 model profile `%TEMP%\musicgenie-r6-models`.
 - Round 4 app checks: `npm run e2e:r4` (packaged) / `npm run e2e:r4:dev`; report
   `test-results/report-round4.json`. No sound checks (nothing unmutes). Item 7 drives the
   MIDI recorder with a simulated input (`mgTest.midiSimulate`); no keyboard needed.
@@ -130,7 +153,7 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   "use it in your software projects", may repackage). `public/soundfont/` and
   `public/font/` are gitignored (the alphaTab Vite plugin fills them). The user's
   SoundFont path is in `userData/settings.json` and in the project (`playback.soundFont`).
-- Project format v6 (`SCHEMA_VERSION = 6`; v6 adds `song.recording` (the original recording's
+- Project format v7 (`SCHEMA_VERSION = 7`; v7 adds `beat.lyrics` (verses), `track.voice` (sung rendering), `track.sound` (library sound), `song.describe` (the plan), `rocksmith.vocals`; v6 adds `song.recording` (the original recording's
   track/clip), `track.analysis` (stem / transcription tag) and `track.omr` (bars the sheet-music
   reader was unsure of). v5 adds `song.mix` (master fx/fader, Reverb + Delay
   send buses), `mixer.fx` / `mixer.sends`, `track.automation` (lanes of bar/tick points) and
@@ -236,6 +259,40 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   (no song edit); the recording/stem plays through a second `BackingPlayer` (`<audio>`,
   `preservesPitch`), so 25-100 % speed keeps the pitch.
 - Swing is applied at playback only, so test truth for swung styles (Jazz) uses `swingTick`.
+- Lyrics (`src/model/lyrics.ts`): `beat.lyrics[verse]`; "Freu-" = the word goes on, "_" = held
+  (melisma), "" = none; v6 `beat.lyric` moves into `lyrics[0]` on load. Slots = sounded beats of
+  voice 1 (tied continuations and rests skipped). alphaTab's MusicXML importer drops `<syllabic>`, so
+  `musicXmlKeepHyphens` adds the "-" first; MIDI lyrics are header meta events (verse 1). The Lyrics
+  dock tab pastes (auto syllables), types and drags (`moveSyllables`: that syllable and all later ones).
+- Rocksmith vocals: helper `read` returns `vocals` (non-Japanese vocals arrangement), `write` takes
+  `vocals` (ms, "-" joins, "+" ends a line; lines end at punctuation, a beat of rest or 8 words) and runs
+  `ArrangementChecker.checkVocals` (length, line breaks, default-font characters; `rsLyricText` maps
+  the rest). Import makes a muted "Vocals" choir track with one syllable per note.
+- Singing (`src/ml/sing.ts`, worker job `sing`): our own phoneme timing (onset consonants end at the
+  note start, vowel holds the note, coda <= 40 %), pitch curve (40 ms glides, delayed vibrato), phrases
+  split at rests >= 300 ms; the voicebank's variance model predicts breathiness/voicing; acoustic
+  (DirectML) -> mel -> vocoder; 44.1 kHz WAV in the project media folder as an audio track tagged
+  `track.voice` (hash of notes+lyrics+tempo+settings -> "out of date"; `auto` re-sings 3 s after edits).
+  English words: the voicebank's `dsdur/dsdict-en.yaml` (268k words), letter rules otherwise.
+  Models unpack into `userData\models\qixuan\Qixuan_v2.7.0_DiffSinger_OpenUtau\` and
+  `userData\models\pc-nsf-hifigan\` (`src/main/unzip.ts`, zip deleted after unpacking).
+- Vocals from a recording: FCPE (CPU) f0 every 10 ms -> `f0ToNotes` (cent offset, 0.6-semitone /
+  energy-dip splits) -> "Vocal melody" track; Whisper (CPU, greedy, 30 s windows cut at quiet points,
+  word times from alignment-head cross-attention + DTW) -> `placeWords` onto the notes.
+- Transcription refinements (Round 7, on by default; `refine: false` = Round 6 behaviour): cent offset
+  from spectral peaks (audio resampled onto the semitone grid when |offset| >= 8 c), bass octave fix
+  (Goertzel energy an octave lower >= 15 %), guitar single-note lines vs chords (`guitarLines`), onsets
+  moved to the high-band spectral-flux peak within ±60 ms, tuning guessed from the note range
+  (written to the track; cent offset to `track.rocksmith.centOffset`).
+- Sound library (`soundLib.ts`, settings `soundLibrary`): a track's `sound` = {file, bank, program};
+  library file k of a song is loaded after the main SoundFont with all its banks moved up by 256*(k+1)
+  (`moveSf2Banks`), and the track plays that bank (alphaTab keeps 11 bank bits: max 7 files per song).
+  SFZ is converted to a one-preset SF2 in memory (`sfzToSf2`: key/vel ranges, root, tune, volume, pan,
+  loops, ampeg). A missing file falls back to the main SoundFont in that bank range.
+- "Describe a song" (`src/model/describe.ts`): parser -> `SongPlan` -> `planToChart` (Round 4 chart)
+  -> `generateBand` with the plan's lineup and feel; `song.describe` keeps the plan. With
+  `ANTHROPIC_API_KEY` set, `src/main/describe.ts` asks Claude for the plan (structured output) and
+  `sanitizePlan` checks it.
 
 ## Testing on Dan's PC: STANDING RULES
 Dan uses his PC while you test. Your test runs must not be heard and must not
@@ -289,22 +346,25 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Rounds 1-6 done: import, score/tab view, playback, undo, autosave; virtual
-band; tab editing, tunings, Rocksmith import/export (in-game test still
-pending Dan); piano roll, chord explorer, drum grid, chord charts, harmony,
-MIDI + keyboard piano; mixer, effects, automation, audio tracks, export;
-recording to tabs (beats, stems, audio to notes, drums, review view, Song to
-Rocksmith wizard, sheet music from PDF). Current round: Round 7 (lyrics,
-singing, vocals from recordings, real-song accuracy, "describe it", sound
-library).
+Rounds 1-7 done: import, score/tab view, playback, undo, autosave; virtual
+band; tab editing, tunings, Rocksmith import/export (in-game test still pending Dan); piano roll,
+chord explorer, drum grid, chord charts, harmony, MIDI + keyboard piano; mixer, effects, automation,
+audio tracks, export; recording to tabs (beats, stems, audio to notes, drums, review view, Song to
+Rocksmith wizard, sheet music from PDF); lyrics (verses, Rocksmith vocals), singing (DiffSinger),
+vocals from recordings (FCPE + Whisper), real-song accuracy refinements (official-chart benchmark),
+"Describe a song", sound library (SF2/SF3/SFZ per track). No current round: Round 8 (VST3) is
+planned in `TODO.md`, waiting for Dan.
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
 progressions, drums, songChanges, chart, harmony, recording, mix, loudness, audioClips,
-beatMap, transcribe), `src/ml` (pure analysis host code), `src/export` (MIDI, MusicXML,
+beatMap, transcribe, lyrics, sounds, describe), `src/ml` (pure analysis host code; Round 7: sing,
+voice, whisper, refine), `src/export` (MIDI, MusicXML,
 Guitar Pro writers), `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
 `src/main` (Electron, settings.json, Rocksmith helper process, ml worker + models, Audiveris),
 `src/preload`, `src/renderer` (React UI, Band panel, dialogs, Round3.tsx edit bar/tuning/export
 dialog, editor keys, player, store, test API; `audio/` engine, graph, fx, worklet, offline, clips,
 recorder; Mixer/Automation/AudioTracks/Round5 export dialog, PrintView; Round6.tsx recording
-panel + wizard, analysis.ts, Review.tsx, omr.ts), `helpers/rocksmith` (.NET helper + library
+panel + wizard, analysis.ts, Review.tsx, omr.ts; Round7.tsx lyrics tab, sound library, Describe
+dialog; singing.tsx, soundLib.ts), `src/render/sf2.ts` (SoundFont tools, SFZ -> SF2), `src/export/vocal.ts`
+(.ustx / .svp), `src/main/describe.ts` (Claude), `src/main/unzip.ts`, `helpers/rocksmith` (.NET helper + library
 submodule), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).

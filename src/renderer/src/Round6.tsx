@@ -55,7 +55,7 @@ export function RecordingPanel({ state, store, status }: { state: AppState; stor
   const song = state.song;
   const busy = !!a.job;
   const [num, setNum] = useState(0);
-  const [kinds, setKinds] = useState<{ bass: boolean; guitar: boolean }>({ bass: true, guitar: true });
+  const [kinds, setKinds] = useState<{ bass: boolean; guitar: boolean; vocals?: boolean }>({ bass: true, guitar: true, vocals: false });
   const [grid, setGrid] = useState('1/16');
   const [loose, setLoose] = useState(false);
   const [txTrack, setTxTrack] = useState('');
@@ -75,6 +75,7 @@ export function RecordingPanel({ state, store, status }: { state: AppState; stor
     if (!ctl) return;
     if (kinds.bass) await ctl.transcribe((stemOf('bass') ?? rc!.track).id, { kind: 'bass', grid, loose });
     if (kinds.guitar) await ctl.transcribe((stemOf('guitar') ?? rc!.track).id, { kind: 'guitar', grid, loose });
+    if (kinds.vocals) await ctl.vocals((stemOf('vocals') ?? rc!.track).id, { grid, loose, lyrics: true });
     ctl.setWizard({ notes: 'done' });
   };
 
@@ -105,11 +106,12 @@ export function RecordingPanel({ state, store, status }: { state: AppState; stor
           <Step n={4} title={txs.length ? `Notes: ${txs.map((t) => t.name).join(', ')}` : 'Transcribe bass and/or guitar'} state={st('notes', txs.length > 0)}>
             <label><input type="checkbox" checked={kinds.bass} onChange={(e) => setKinds({ ...kinds, bass: e.target.checked })} /> bass</label>
             <label><input type="checkbox" checked={kinds.guitar} onChange={(e) => setKinds({ ...kinds, guitar: e.target.checked })} /> guitar</label>
+            <label title="Vocal melody + lyrics (FCPE + Whisper)"><input type="checkbox" checked={!!kinds.vocals} onChange={(e) => setKinds({ ...kinds, vocals: e.target.checked })} data-testid="wiz-vocals" /> vocals</label>
             <select value={grid} onChange={(e) => setGrid(e.target.value)} title="Snap notes to">
               {GRIDS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
             </select>
             <label title="Keep the timing as played (1/64 grid)"><input type="checkbox" checked={loose} onChange={(e) => setLoose(e.target.checked)} /> loose</label>
-            <button disabled={!rc || busy || (!kinds.bass && !kinds.guitar)} onClick={run(transcribeParts)} data-testid="wiz-notes">Run</button>
+            <button disabled={!rc || busy || (!kinds.bass && !kinds.guitar && !kinds.vocals)} onClick={run(transcribeParts)} data-testid="wiz-notes">Run</button>
           </Step>
           <Step n={5} title="Review against the audio (fix notes and beats)" state={w.review === 'done' ? 'done' : 'todo'}>
             <button disabled={!song} className={r.on ? 'chip' : ''} onClick={() => {
@@ -158,6 +160,8 @@ export function RecordingPanel({ state, store, status }: { state: AppState; stor
           </select>
           <button disabled={!drTrack || busy} onClick={run(() => ctl!.separateStems(drTrack))}>Stems</button>
           <button disabled={!drTrack || busy} onClick={run(() => ctl!.drums(drTrack, { grid, loose }))} title="Kick, snare, hi-hat, toms, crash, ride">Drums → drum track</button>
+          <button disabled={!drTrack || busy} data-testid="vocals-run" onClick={run(() => ctl!.vocals(drTrack, { grid, loose, lyrics: true }))}
+            title="Vocal stem → melody track (FCPE pitch tracker) with the lyrics on its notes (Whisper speech to text)">Vocals → melody + lyrics</button>
         </div>
         <div className="small">Results are ordinary tracks: edit them, undo them; the recording itself is never changed.</div>
       </section>

@@ -16,6 +16,7 @@ import { MixerView } from './Mixer';
 import { AutomationPanel } from './Automation';
 import { AudioPanel } from './AudioTracks';
 import { RecordingPanel } from './Round6';
+import { LyricsPanel, SoundLibrary } from './Round7';
 import type { AppState, DockTab, Store } from './store';
 
 const TABS: { id: DockTab; label: string; title: string }[] = [
@@ -28,6 +29,8 @@ const TABS: { id: DockTab; label: string; title: string }[] = [
   { id: 'auto', label: '〰 Automation', title: 'Volume, pan and effect settings that change over time' },
   { id: 'audio', label: '🎙 Audio', title: 'Audio tracks: import, record, move, trim, split, fades' },
   { id: 'rec', label: '🎧 Recording', title: 'Recording to tabs: beats, stems, audio to notes, drums, review, Song to Rocksmith, sheet music' },
+  { id: 'lyrics', label: '🎤 Lyrics', title: 'Lyrics (verses, syllables) and singing' },
+  { id: 'sounds', label: '🎻 Sounds', title: 'Sound library: SoundFonts and SFZ instruments, a sound per track' },
 ];
 
 export function Dock({ state, store, status, midi }: { state: AppState; store: Store; status: PlayerStatus | null; midi: MidiController }) {
@@ -48,7 +51,7 @@ export function Dock({ state, store, status, midi }: { state: AppState; store: S
   }
   const ti = Math.min(state.selTrack, song.tracks.length - 1);
   return (
-    <div className={`dock ${state.dock === 'mixer' || state.dock === 'audio' || state.dock === 'rec' ? 'tall' : ''}`} data-testid="dock">
+    <div className={`dock ${state.dock === 'mixer' || state.dock === 'audio' || state.dock === 'rec' || state.dock === 'lyrics' || state.dock === 'sounds' ? 'tall' : ''}`} data-testid="dock">
       <div className="dock-tabs">
         {TABS.map((t) => (
           <button key={t.id} className={state.dock === t.id ? 'chip' : ''} title={t.title} onClick={() => store.openDock(t.id)} data-testid={'dock-' + t.id}>{t.label}</button>
@@ -69,6 +72,8 @@ export function Dock({ state, store, status, midi }: { state: AppState; store: S
         {state.dock === 'auto' && song.tracks.length > 0 && <AutomationPanel state={state} store={store} status={status} />}
         {state.dock === 'audio' && <AudioPanel state={state} store={store} status={status} />}
         {state.dock === 'rec' && <RecordingPanel state={state} store={store} status={status} />}
+        {state.dock === 'lyrics' && song.tracks.length > 0 && <LyricsPanel state={state} store={store} status={status} />}
+        {state.dock === 'sounds' && <SoundLibrary state={state} store={store} />}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import * as alphaTab from '@coderline/alphatab';
 import { Midi } from '@tonejs/midi';
 import { barStartTicks, durationTicks, trackEvents, PPQ, type Beat, type Note, type Song, type Track } from '../model';
 import { toAlphaTabScore } from '../render/toAlphaTab';
+import { hasLyrics, lyricEvents, syllabicOf, MELISMA } from '../model/lyrics';
 
 const playable = (song: Song) => song.tracks.filter((t) => !t.audio);
 
@@ -32,6 +33,7 @@ export function exportMidi(song: Song): Uint8Array {
   });
   midi.header.update();
   let ch = 0;
+  let lyricsWritten = false;
   for (const t of playable(song)) {
     const tr = midi.addTrack();
     tr.name = t.name;
@@ -53,6 +55,11 @@ export function exportMidi(song: Song): Uint8Array {
         } else at += durationTicks(b.duration);
       }
     })));
+    // Lyrics (verse 1) as lyric meta events; @tonejs/midi writes them into the first (tempo) track.
+    if (!lyricsWritten && hasLyrics(t)) {
+      lyricsWritten = true;
+      for (const e of lyricEvents(song, t, 0)) midi.header.meta.push({ type: 'lyrics', text: e.text + (e.hyphen ? '-' : ''), ticks: Math.round(e.tick * k) });
+    }
     // Pan and volume as controllers at the start.
     tr.addCC({ number: 7, value: Math.round(Math.min(1, t.mixer.volume / 0.8) * 100) / 127, ticks: 0 });
     tr.addCC({ number: 10, value: (t.mixer.pan + 1) / 2, ticks: 0 });
@@ -126,6 +133,24 @@ export function exportMusicXml(song: Song): string {
         for (const n of seq[i].beat.notes) if (seq[j].beat.notes.some((x) => x.tieFromPrevious && x.pitch === n.pitch)) tieStarts.add(n);
       }
     }));
+    // Lyrics: <syllabic> from the hyphen chain, <extend/> when the next note holds the syllable.
+    const lyricXml = new Map<Beat, string>();
+    flat.forEach((voices) => voices.forEach((seq) => {
+      const sung = seq.map((x) => x.beat).filter((b) => !b.grace && b.notes.length && !b.notes.every((n) => n.tieFromPrevious));
+      const verses = Math.max(0, ...sung.map((b) => b.lyrics?.length ?? 0));
+      for (let vn = 0; vn < verses; vn++) {
+        let prevHyphen = false;
+        sung.forEach((b, i) => {
+          const s = b.lyrics?.[vn];
+          if (!s || s === MELISMA) return;
+          const hyphen = s.length > 1 && s.endsWith('-');
+          const text = hyphen ? s.slice(0, -1) : s;
+          const ext = sung[i + 1]?.lyrics?.[vn] === MELISMA ? '<extend/>' : '';
+          lyricXml.set(b, (lyricXml.get(b) ?? '') + `<lyric number="${vn + 1}"><syllabic>${syllabicOf(prevHyphen, hyphen)}</syllabic><text>${esc(text)}</text>${ext}</lyric>`);
+          prevHyphen = hyphen;
+        });
+      }
+    }));
     song.bars.forEach((bar, bi) => {
       out.push(`<measure number="${bi + 1}">`);
       const prev = song.bars[bi - 1];
@@ -175,7 +200,7 @@ export function exportMusicXml(song: Song): string {
             const typ = `<type>${TYPE[b.duration.base]}</type>` + '<dot/>'.repeat(b.duration.dots) +
               (b.duration.tuplet ? `<time-modification><actual-notes>${b.duration.tuplet.num}</actual-notes><normal-notes>${b.duration.tuplet.den}</normal-notes></time-modification>` : '');
             const staff = t.staves.length > 1 ? `<staff>${si + 1}</staff>` : '';
-            const lyric = b.lyric ? `<lyric number="1"><syllabic>single</syllabic><text>${esc(b.lyric)}</text></lyric>` : '';
+            const lyric = lyricXml.get(b) ?? '';
             if (!b.notes.length) {
               out.push(`<note>${timing}<rest/>${b.grace ? '' : `<duration>${d}</duration>`}<voice>${voice}</voice>${typ}${staff}</note>`);
             } else {

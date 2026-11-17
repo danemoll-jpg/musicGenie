@@ -4,6 +4,7 @@ import * as alphaTab from '@coderline/alphatab';
 import { assignChord } from '../model/fretting';
 import type { Clef, Song, Track } from '../model/types';
 import { barTicks, durationTicks } from '../model/timing';
+import { trackBank } from '../model/sounds';
 
 const m = alphaTab.model;
 
@@ -71,6 +72,11 @@ export function toAlphaTabScore(song: Song, settings: alphaTab.Settings, opts: R
     track.shortName = t.name.slice(0, 10);
     const pb = track.playbackInfo;
     pb.program = t.instrument.program;
+    // Round 7: a sound-library sound = its own bank range + the preset's program.
+    if (t.sound && !t.audio && !t.instrument.percussion) {
+      pb.program = t.sound.program;
+      pb.bank = trackBank(song, t);
+    }
     if (t.audio) {
       pb.primaryChannel = 15;
       pb.secondaryChannel = 15;
@@ -141,7 +147,8 @@ function buildStaves(track: alphaTab.model.Track, t: Track, song: Song, showChor
             beat.tupletDenominator = b.duration.tuplet.den;
           }
           if (b.grace) beat.graceType = m.GraceType.BeforeBeat;
-          if (b.lyric) beat.lyrics = [b.lyric];
+          const lyr = b.lyrics ?? (b.lyric ? [b.lyric] : null);
+          if (lyr?.some((l) => l && l !== '_')) beat.lyrics = lyr.map((l) => (l === '_' ? '' : l));
           if (b.text) beat.text = b.text;
           beat.isEmpty = false;
 

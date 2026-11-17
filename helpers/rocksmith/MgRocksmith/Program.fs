@@ -217,6 +217,9 @@ let readXml (args: JsonNode) : JsonNode =
         "arrangements", jarr [ instrumentalJson None xml ]
     ]
 
+let private vocalJson (v: Vocal) : JsonNode =
+    jobj [ "time", jint v.Time; "length", jint v.Length; "lyric", jstr v.Lyric; "note", jint (int v.Note) ]
+
 let readPsarc (args: JsonNode) : JsonNode =
     let path = getStr args "psarc" ""
     let outDir = getStr args "outDir" (Path.Combine(Path.GetTempPath(), "mg-psarc-" + Guid.NewGuid().ToString("N")))
@@ -269,8 +272,18 @@ let readPsarc (args: JsonNode) : JsonNode =
                 (body :?> JsonObject)["sourceXmlHardest"] <- sourceCounts inst.XmlPath
                 Some body
             | _ -> None)
+    // Round 7: the vocals arrangement (lyrics), times in ms.
+    let vocals =
+        result.ArrangementData
+        |> List.tryPick (fun (arr, data) ->
+            match arr, data with
+            | Arrangement.Vocals v, PsarcImportTypes.ImportedData.Vocals vs when not v.Japanese -> Some vs
+            | _ -> None)
+        |> Option.map (fun vs -> vs |> Seq.map vocalJson |> Seq.toList |> jarr)
+        |> Option.defaultValue null
 
     jobj [
+        "vocals", vocals
         "title", jstr project.Title.Value
         "artist", jstr project.ArtistName.Value
         "album", jstr project.AlbumName.Value
@@ -312,6 +325,10 @@ let checkArrangement (arrName: string) (xml: InstrumentalArrangement) : JsonNode
 
 let checkXml (args: JsonNode) : JsonNode =
     let path = getStr args "xml" ""
+    if Path.GetFileName(path).ToLowerInvariant().Contains "vocals" then
+        let list = Vocals.Load path |> ResizeArray
+        jobj [ "xml", jstr path; "vocals", jint list.Count; "issues", jarr (ArrangementChecker.checkVocals None list |> Seq.map (issueJson "Vocals") |> Seq.toList) ]
+    else
     let xml = InstrumentalArrangement.Load(path)
     let issues = checkArrangement (Path.GetFileNameWithoutExtension path) xml
     jobj [ "xml", jstr path; "issues", jarr issues ]
@@ -421,6 +438,28 @@ let writePsarc (args: JsonNode) : JsonNode =
             let toneKind = match routeMask with RouteMask.Bass -> "bass" | RouteMask.Rhythm -> "rhythm" | _ -> "lead"
             inst, loadTone toneKind toneKey)
 
+    // 1b. Vocals (lyrics), checked like DLC Builder does (length, line breaks, font characters).
+    let vocalsArr =
+        match get args "vocals" with
+        | null -> None
+        | v when (items v).IsEmpty -> None
+        | v ->
+            let list =
+                items v
+                |> List.map (fun x -> Vocal(getInt x "time" 0, max 1 (getInt x "length" 1), getStr x "lyric" "", byte (getInt x "note" 60)))
+                |> ResizeArray
+            let xmlPath = Path.Combine(outDir, "arr_vocals_RS2.xml")
+            Vocals.Save(xmlPath, list |> Seq.toList |> Collections.Generic.List)
+            issues <- issues @ (ArrangementChecker.checkVocals None list |> Seq.map (issueJson "Vocals") |> Seq.toList)
+            ddInfo <- ddInfo @ [ jobj [ "arrangement", jstr "Vocals"; "xml", jstr xmlPath; "syllables", jint list.Count ] ]
+            Some (Arrangement.Vocals
+                    { Id = ArrangementId.New
+                      XmlPath = xmlPath
+                      Japanese = false
+                      CustomFont = None
+                      MasterId = RandomGenerator.next ()
+                      PersistentId = Guid.NewGuid() })
+
     // 2. Album art, audio, preview
     progress "preparing audio and album art"
     let albumArt =
@@ -453,7 +492,7 @@ let writePsarc (args: JsonNode) : JsonNode =
             AudioFileLength = Some audioLength
             AudioPreviewFile = { Path = previewWav; Volume = getFloat args "volume" -7.0 }
             AudioPreviewStartTime = Some previewStart
-            Arrangements = instrumentals |> List.map (fun (i, _) -> Arrangement.Instrumental i)
+            Arrangements = (instrumentals |> List.map (fun (i, _) -> Arrangement.Instrumental i)) @ Option.toList vocalsArr
             Tones = instrumentals |> List.map snd }
 
     // 3. DLC Builder project, so the export can always be finished by hand.

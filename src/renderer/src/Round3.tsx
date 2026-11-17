@@ -5,6 +5,7 @@ import {
   deleteBars, deleteBeat, deleteNote, hasTechnique, insertBars, insertBeat, isFretted,
   makeRest, paste, pitchName, presetFor, rocksmithProblem, setDuration, toggleDot, toggleTie, toggleTriplet,
   tuningPresetsFor, type Cursor, type DurationBase, type RocksmithExport, type RsArrangementType, type Song, type Track,
+  hasLyrics, verseCount,
 } from '../../model';
 import { applyTechnique, copySelection, tabMode, TECH_KEYS } from './editor';
 import type { PlayerStatus, Rect, ScorePlayer } from './player';
@@ -195,8 +196,10 @@ function defaultSettings(song: Song): RocksmithExport {
       seen.add(type);
       return bonus ? { trackId: t.id, type, bonus } : { trackId: t.id, type };
     });
+  const sung = song.tracks.find((t) => hasLyrics(t));
   return {
     title: song.title, artist: song.artist, album: song.album, year: new Date().getFullYear(),
+    ...(sung ? { vocals: { trackId: sung.id } } : {}),
     arrangements, audio: song.backing ? 'file' : 'mix', audioFile: song.backing?.path, audioOffsetMs: song.backing?.offsetMs,
     previewStartMs: 0,
   };
@@ -274,6 +277,17 @@ export function RocksmithDialog({ state, store, player }: { state: AppState; sto
         </table>
         {problems.map((p) => <div key={p} className="problem">{p}</div>)}
         <div className="grid2">
+          <span className="sub">Vocals (lyrics)</span>
+          <span className="rowx">
+            <select value={s.vocals?.trackId ?? ''} data-testid="rs-vocals" onChange={(e) => up({ vocals: e.target.value ? { trackId: e.target.value, verse: 0 } : undefined })}>
+              <option value="">none</option>
+              {song.tracks.filter((t) => hasLyrics(t)).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            {s.vocals && (() => { const t = song.tracks.find((x) => x.id === s.vocals!.trackId); const n = t ? verseCount(t) : 0; return n > 1 ? (
+              <select value={s.vocals.verse ?? 0} onChange={(e) => up({ vocals: { ...s.vocals!, verse: Number(e.target.value) } })}>
+                {Array.from({ length: n }, (_, i) => <option key={i} value={i}>verse {i + 1}</option>)}
+              </select>) : null; })()}
+          </span>
           <span className="sub">Title</span><input value={s.title ?? ''} onChange={(e) => up({ title: e.target.value })} />
           <span className="sub">Artist</span><input value={s.artist ?? ''} onChange={(e) => up({ artist: e.target.value })} />
           <span className="sub">Album</span><input value={s.album ?? ''} onChange={(e) => up({ album: e.target.value })} />
@@ -311,7 +325,7 @@ export function RocksmithDialog({ state, store, player }: { state: AppState; sto
           <div className="result" data-testid="rs-result">
             <b>{r.stage === 'done' ? 'Done: ' + r.psarc : r.stage === 'wwise' ? 'Stopped at the audio conversion (Wwise).' : 'The arrangement checks found problems.'}</b>
             {r.error && <div className="sub">{r.error}</div>}
-            <div className="sub">Checks: {r.issues.length ? `${r.issues.length} issue(s)` : 'no problems'} · difficulty levels: {r.arrangements.map((a) => `${a.arrangement} ${a.ddLevels}`).join(', ')}</div>
+            <div className="sub">Checks: {r.issues.length ? `${r.issues.length} issue(s)` : 'no problems'} · difficulty levels: {r.arrangements.map((a) => (a.syllables !== undefined ? `${a.arrangement}: ${a.syllables} syllables` : `${a.arrangement} ${a.ddLevels}`)).join(', ')}</div>
             {r.issues.slice(0, 12).map((i, k) => <div key={k} className={i.severity === 'error' ? 'problem' : 'sub'}>{i.arrangement}: {i.type}{i.timeMs !== null ? ` at ${(i.timeMs / 1000).toFixed(2)} s` : ''}</div>)}
             {r.copiedTo && <div className="sub">Copied to {r.copiedTo}</div>}
             {r.stage !== 'done' && <div className="sub">Kept: arrangement XML, the WAV and a DLC Builder project you can finish by hand: {r.rs2dlc}</div>}

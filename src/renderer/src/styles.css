@@ -281,3 +281,32 @@ select.harm { max-width: 110px; }
 .recpanel .step.skipped .num { background: #bbb; color: #fff; }
 .recpanel .step .st { flex: 1 1 auto; min-width: 200px; }
 .recpanel .step .sa { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- Round 7: lyrics, singing, sound library, describe ---------- */
+.lyrics-panel { display: flex; flex-direction: column; gap: 6px; padding: 8px; font-size: 12px; overflow: auto; }
+.lyr-top, .lyr-btns, .vrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lyr-paste { display: flex; gap: 8px; align-items: stretch; }
+.lyr-paste textarea { flex: 1; font: inherit; resize: vertical; min-height: 44px; }
+.lyr-btns { flex-direction: column; align-items: stretch; width: 170px; }
+.lyr-strip { display: flex; gap: 2px; overflow-x: auto; padding: 4px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.lyr-slot { display: flex; flex-direction: column; min-width: 56px; border-radius: 4px; padding: 2px; }
+.lyr-slot.droppable { outline: 1px dashed #9bb; }
+.lyr-note { font-size: 10px; color: #777; white-space: nowrap; }
+.lyr-syl { width: 54px; font: inherit; padding: 1px 3px; border: 1px solid #ccd; border-radius: 3px; cursor: grab; }
+.lyr-syl.held { color: #999; }
+.voice-panel { border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; background: #fff; }
+.voice-panel h4 { margin: 0 0 4px; }
+.vslider { display: inline-flex; gap: 4px; align-items: center; }
+.vslider input { width: 90px; }
+.voice-panel .warn { color: #b25b00; }
+.voice-panel .ok { color: #2a7a2a; }
+.voice-panel .spacer { flex: 1; }
+.sound-lib { display: flex; gap: 12px; padding: 8px; font-size: 12px; overflow: auto; flex-wrap: wrap; }
+.sound-lib section { border: 1px solid #ddd; border-radius: 6px; padding: 8px; background: #fff; min-width: 260px; flex: 1; }
+.sound-lib .lib-item { border-bottom: 1px solid #eee; padding: 4px 0; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.sound-lib .path { font-size: 10px; color: #888; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sound-lib .recommended table { border-collapse: collapse; width: 100%; }
+.sound-lib .recommended td { border-bottom: 1px solid #eee; padding: 3px 4px; vertical-align: top; }
+.sound-lib code.link { cursor: copy; font-size: 10px; word-break: break-all; }
+.chart-preview { background: #f7f6f2; border: 1px solid #ddd; border-radius: 4px; padding: 6px; font-size: 11px; max-height: 140px; overflow: auto; white-space: pre-wrap; }
+.grid2.plan { align-items: start; }
