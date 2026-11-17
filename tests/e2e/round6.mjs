@@ -479,6 +479,37 @@ try {
     const lv = await assertSilent(page, 'item9', 300);
     record(9, { schemaVersion: saved.schemaVersion, before, after: { ...after, clipsExist: exist }, undoSteps: counts, redoBars: redo, transcriptionTrack: tx.trackId, speaker: lv.postPeak });
   }
+
+  // ---------- 10: the download question, answered with the real buttons ----------
+  if (want(10)) {
+    await ev(page, () => window.mgTest.mlAutoAccept(false));
+    const clickIn = (label) => ev(page, (l) => {
+      const b = [...document.querySelectorAll('[data-testid="confirm"] button')].find((x) => x.textContent === l);
+      if (!b) throw new Error('no ' + l + ' button');
+      b.click();
+    }, label);
+    const waitQuestion = async () => {
+      for (let i = 0; i < 100; i++) { if (await ev(page, () => !!document.querySelector('[data-testid="confirm"]'))) return ev(page, () => document.querySelector('[data-testid="confirm"] p').textContent); await sleep(100); }
+      throw new Error('no download question shown');
+    };
+    // Cancel: nothing downloads, the job returns nothing.
+    const p1 = ev(page, () => window.mgTest.mlProbe());
+    const q1 = await waitQuestion();
+    await clickIn('Cancel');
+    const r1 = await p1;
+    const after1 = await ev(page, () => window.mgTest.mlModels().then((m) => m.find((x) => x.id === 'basic-pitch').installed));
+    // Download: the model arrives and the job runs.
+    const p2 = ev(page, () => window.mgTest.mlProbe());
+    await waitQuestion();
+    await clickIn('Download');
+    const r2 = await p2;
+    const after2 = await ev(page, () => window.mgTest.mlModels().then((m) => m.find((x) => x.id === 'basic-pitch').installed));
+    check(r1 === null && !after1, 'Cancel downloads nothing');
+    check(!!r2 && after2, 'Download downloads and runs');
+    const lv = await assertSilent(page, 'item10', 300);
+    record(10, { question: q1, cancel: { result: r1, installed: after1 }, download: { provider: r2.provider, installed: after2 }, speaker: lv.postPeak });
+    await ev(page, () => window.mgTest.mlAutoAccept(true));
+  }
 } catch (e) {
   console.error(e);
   report.error = String(e?.stack ?? e);

@@ -338,9 +338,21 @@ export class Store {
   }
   answer(yes: boolean) {
     const fn = this.confirmYes;
+    const no = this.confirmNo;
     this.confirmYes = null;
+    this.confirmNo = null;
     this.set({ confirm: null });
     if (yes) fn?.();
+    else no?.();
+  }
+  private confirmNo: (() => void) | null = null;
+  /** Ask in the app and wait: true = the yes button, false = Cancel (or replaced by another question). */
+  askAsync(message: string, yes: string): Promise<boolean> {
+    this.confirmNo?.();
+    return new Promise<boolean>((resolve) => {
+      this.ask(message, yes, () => resolve(true));
+      this.confirmNo = () => resolve(false);
+    });
   }
 
   // band

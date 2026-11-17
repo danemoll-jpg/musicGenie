@@ -60,11 +60,7 @@ export const omrCtl = {
   async ensureInstalled(store: Store): Promise<boolean> {
     const st = await window.mg.omrStatus();
     if (st.installed) return true;
-    const ok = this.autoAccept || (await new Promise<boolean>((resolve) => {
-      let answered = false;
-      store.ask(`Reading sheet music needs Audiveris ${st.version ?? '5.11.0'} (${(st.size / 1e6).toFixed(0)} MB download, ${st.licence}). Download and unpack it into the app's data folder? Only done once.`, 'Download', () => { answered = true; resolve(true); });
-      const off = store.on((s) => { if (!s.confirm) { off(); if (!answered) resolve(false); } });
-    }));
+    const ok = this.autoAccept || (await store.askAsync(`Reading sheet music needs Audiveris ${st.version ?? '5.11.0'} (${(st.size / 1e6).toFixed(0)} MB download, ${st.licence}). Download and unpack it into the app's data folder? Only done once.`, 'Download'));
     if (!ok) return false;
     await analysisCtl.current!.withJob('Installing Audiveris', () => window.mg.omrInstall());
     return true;

@@ -73,18 +73,9 @@ export class Analysis {
     const missing = models.filter((m) => ids.includes(m.id) && !m.installed);
     if (!missing.length) return true;
     const mb = (b: number) => (b / 1e6).toFixed(b < 1e6 ? 2 : 0) + ' MB';
-    const text = 'This needs ' + missing.map((m) => `${m.title} (${mb(m.bytes)}, ${m.licence.split(';')[0]})`).join(', ') +
+    const text = 'This needs ' + missing.map((m) => `${m.title} (${mb(m.bytes)}, licence: ${m.short})`).join(', ') +
       '. Download now into the app\'s data folder? It is only downloaded once.';
-    const ok = this.autoAccept || (await new Promise<boolean>((resolve) => {
-      let answered = false;
-      this.store.ask(text, 'Download', () => { answered = true; resolve(true); });
-      const off = this.store.on((s) => {
-        if (!s.confirm) {
-          off();
-          if (!answered) resolve(false);
-        }
-      });
-    }));
+    const ok = this.autoAccept || (await this.store.askAsync(text, 'Download'));
     if (!ok) return false;
     for (const m of missing) {
       await this.withJob('Downloading ' + m.title, () => window.mg.mlDownload(m.id));

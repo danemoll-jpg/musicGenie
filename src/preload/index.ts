@@ -84,6 +84,7 @@ export interface MlModelStatus {
   title: string;
   use: string;
   licence: string;
+  short: string;
   source: string;
   files: { name: string; url: string; size: number }[];
   bytes: number;

@@ -13,6 +13,8 @@ export interface ModelInfo {
   title: string;
   use: string;
   licence: string;
+  /** Licence in a few words, for the download question. */
+  short: string;
   source: string;
   files: ModelFile[];
 }
@@ -26,6 +28,7 @@ export const MODELS: ModelInfo[] = [
     // The first ONNX export (final0.onnx) froze the time axis (beats stop after ~6 s of each
     // chunk); final0-v2.onnx is the re-export with a dynamic time axis.
     licence: 'MIT (CPJKU Beat This! code and weights; ONNX conversion by ashudesai, MIT)',
+    short: 'MIT',
     source: 'https://github.com/CPJKU/beat_this',
     files: [{ name: 'final0-v2.onnx', url: `${HF}/ashudesai/songbird-models/resolve/813eff2f8a91c564783f6194b062ade2b46a3ed6/final0-v2.onnx`, size: 83106058 }],
   },
@@ -33,6 +36,7 @@ export const MODELS: ModelInfo[] = [
     id: 'demucs-6s',
     title: 'HT-Demucs 6 stems',
     use: 'splitting a recording into drums, bass, other, vocals, guitar, piano',
+    short: 'code MIT, weights CC BY-NC 4.0 = personal/non-commercial use',
     licence: 'Demucs code MIT (Meta); weights: Meta Demucs v4, CC BY-NC 4.0 (non-commercial) per the ONNX export; ONNX export by HRSadeghi (MIT)',
     source: 'https://github.com/adefossez/demucs',
     files: [
@@ -45,6 +49,7 @@ export const MODELS: ModelInfo[] = [
     title: 'basic-pitch (ICASSP 2022)',
     use: 'audio to notes',
     licence: 'Apache-2.0 (Spotify basic-pitch v0.4.0)',
+    short: 'Apache-2.0',
     source: 'https://github.com/spotify/basic-pitch',
     files: [{ name: 'nmp.onnx', url: 'https://github.com/spotify/basic-pitch/raw/v0.4.0/basic_pitch/saved_models/icassp_2022/nmp.onnx', size: 230444 }],
   },
