@@ -200,14 +200,96 @@ New: **🎤 Lyrics** and **🎻 Sounds** tabs in the 🎹 Compose dock, New ▸ 
 - Still open from earlier rounds: try the Round 2-6 features (each round above says how); Round 5
   recording with a real input, Round 4 with a real MIDI keyboard.
 
-## Current Objective: none (Round 7 done; Round 8 is planned below, waiting for Dan)
+## Current Objective: Round 8, "make it understandable"
+**Why (Dan, 2026-11-17):** he doesn't understand most of the tools, why or
+when to use them; the score/tabs are squeezed into a small strip; and the
+app leans too hard on Rocksmith, which was never part of the original idea
+(it's a bonus). The original idea, and what the app must feel like it's
+for: **open or write music, see it as sheet music/tabs, give it instruments
+and a band, hear it.** Everything else supports that.
+No new features this round: layout, wording, guidance. Don't remove any
+feature; move it to where it belongs.
+
+1. **The music is the main thing on screen.** The score/tab view gets most
+   of the window by default (at 1280x720 and 1920x1080 it must take at
+   least 60% of the window area in the default layout). The window opens
+   maximized and remembers its size. Side panels and the bottom dock are
+   collapsible, resizable by dragging, and start collapsed or narrow;
+   their state is remembered. A **Full score** button (and F11) shows only
+   the music plus a slim play bar; Esc returns. Zoom in/out (Ctrl +/-,
+   Ctrl+wheel, fit-to-width). View choice: scrolling (one long line) or
+   **page view** like printed sheet music. Check: screenshots of the
+   default layout and Full score at both sizes, with the area measured.
+2. **Organise the app by what you're doing.** Replace the crowded two-row
+   toolbar with: a menu bar (File, Edit, View, Song, Tools, Help), one slim
+   play bar (play/stop, position, tempo, loop, metronome, speed, volume),
+   and four workspace tabs, each showing only its own panels:
+   - **Arrange** (default): score + tracks + band. Open music, choose
+     instruments, generate a band, hear it.
+   - **Write**: note entry, piano roll, drum grid, chords, progressions,
+     lyrics, keyboard piano / MIDI.
+   - **Mix**: mixer, effects, automation, audio tracks, sounds.
+   - **Recordings**: turn a recording into notes (beats, split into
+     instruments, audio to notes, drums, vocals), review view, sheet music
+     from PDF/photo.
+   Rocksmith leaves the main toolbar: **File > Export > Rocksmith 2014...**
+   and an optional last step in the Recordings flow. The "Song to Rocksmith"
+   wizard becomes **"Recording to sheet music"** (ending in a normal song;
+   Rocksmith export is one of its export choices). Check: screenshot of each
+   workspace; every former feature reachable (list each and where it lives
+   now in the report).
+3. **Plain words.** Rename jargon in the UI, keeping the technical word in
+   the tooltip where useful: e.g. "Stems" -> "Split into instruments",
+   "Transcribe" -> "Turn audio into notes", "Package" -> "Save as one
+   file", "Automation" -> "Changes over time", "Split" -> "Split into
+   melody / bass / harmony", "Count-in" -> "Count-in (clicks before
+   playing)". Hide expert settings (seeds, grid choices, model options,
+   latency, etc.) behind "More options" in each panel. Check: list of every
+   rename in the report.
+4. **Home screen.** With no song open (and via File > Home): big cards for
+   what you can do, each with one line on what happens: "Open sheet music
+   or a MIDI/Guitar Pro file", "Describe a song and hear it", "Start from
+   chords", "Write from scratch", "Turn a recording into sheet music",
+   "Try an example". Recent files. Ship 3-4 public-domain example songs
+   (e.g. Ode to Joy, a Bach prelude, a folk tune, a 12-bar blues chart).
+   Check: screenshot; each card opens the right flow.
+5. **Guided tours.** A first-run tour (skippable, re-run from Help) that
+   points at the real buttons step by step for the main path: open an
+   example -> see the score -> change an instrument -> generate a band ->
+   play -> make the score bigger. Plus short tours from Help for: writing
+   notes, starting from chords, mixing and exporting, turning a recording
+   into sheet music, (bonus) Rocksmith export. Check: each tour completes
+   in the hidden app (automated clicks follow every step).
+6. **Help everywhere.** Every button, menu item and control has a tooltip
+   that says what it does AND when you'd use it (one line each). Every
+   panel has a "?" that opens a short help page: what it is, why/when to
+   use it, a 3-step example. Help > Help topics: searchable, plus a short
+   glossary (bar, track, stem, transpose, tab, chord symbol, etc.).
+   Written for someone who doesn't read music. Check: automated test that
+   every interactive control has a tooltip and every panel has a help page;
+   report the count.
+7. **Docs.** Update `Docs/VISION.md` (Rocksmith is a bonus export, not the
+   centre) and `CLAUDE.md` (the workspace layout, where new features go,
+   the tooltip/help rule: every new control needs a tooltip and a help
+   entry). Write `Docs/USER-GUIDE.md` from the help pages.
+8. **Regression.** All Round 1-7 app checks pass with the new layout
+   (update their selectors, not their expectations); save/load and undo
+   unchanged.
+
+### For Dan to check (fill in at end of round)
+- Does the app now make sense? Take the first-run tour, then try one thing
+  on your own, and say where you got lost.
+- Play an exported song in Rocksmith 2014 (still pending; a bonus now).
 
 ## Next Steps (Do Not Start Yet)
 - **Later, unordered:** test item 7 of Round 4 with a real MIDI keyboard and Round 5
   recording with a real audio input (interface / Real Tone Cable).
-- **Round 8 (planned): VST3 instruments and effects.** Needs a native host
+- **Round 9 (planned): VST3 instruments and effects.** Needs a native host
   process (C++, e.g. JUCE) with audio routed back into our mixer and offline
   render; deferred from Round 7 because it is a round on its own.
+- **Later: recording-to-notes accuracy round 2** (stronger multi-instrument
+  models, fast cleanup tools such as fix-octave-on-selection and snap to
+  chord shape). Lower priority since Rocksmith is a bonus.
 - **Later:** Rocksmith tones (pick amp/pedal gear per arrangement instead of
   DLC Builder's default tone).
 

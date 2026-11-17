@@ -346,14 +346,12 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Rounds 1-7 done: import, score/tab view, playback, undo, autosave; virtual
-band; tab editing, tunings, Rocksmith import/export (in-game test still pending Dan); piano roll,
-chord explorer, drum grid, chord charts, harmony, MIDI + keyboard piano; mixer, effects, automation,
-audio tracks, export; recording to tabs (beats, stems, audio to notes, drums, review view, Song to
-Rocksmith wizard, sheet music from PDF); lyrics (verses, Rocksmith vocals), singing (DiffSinger),
-vocals from recordings (FCPE + Whisper), real-song accuracy refinements (official-chart benchmark),
-"Describe a song", sound library (SF2/SF3/SFZ per track). No current round: Round 8 (VST3) is
-planned in `TODO.md`, waiting for Dan.
+Rounds 1-7 built the features (import, score/tabs, band, editing, Rocksmith,
+composition tools, mixer/effects/export, recording to notes, lyrics/singing,
+describe a song). Dan found the UI confusing, the score too small, and the
+app too Rocksmith-centred. Current round: Round 8, a layout/wording/help
+round with no new features (score-first layout, four workspaces, plain
+words, home screen, guided tours, help everywhere).
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
 progressions, drums, songChanges, chart, harmony, recording, mix, loudness, audioClips,

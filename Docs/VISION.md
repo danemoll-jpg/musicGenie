@@ -26,3 +26,7 @@ by hand.
   Rocksmith via a .NET helper using Rocksmith2014.NET.
 - Sound quality depends on the sample library: plan for better SoundFonts or
   VST3 instruments rather than expecting the default sounds to be realistic.
+- 2026-11-17 (Dan): Rocksmith is a bonus, not the centre. The app is for
+  opening or writing music, seeing it as sheet music/tabs, giving it
+  instruments and a band, and hearing it. The UI must put the score first
+  and explain every tool in plain words (Round 8).
