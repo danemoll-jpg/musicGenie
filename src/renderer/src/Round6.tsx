@@ -119,7 +119,15 @@ export function RecordingPanel({ state, store, status }: { state: AppState; stor
             }} data-testid="wiz-review">{r.on ? 'Close review' : 'Open review'}</button>
           </Step>
           <Step n={6} title="Export to Rocksmith with the original recording as the song audio" state="todo">
-            <button disabled={!song || !txs.some((t) => t.tuning)} onClick={() => ctl!.openRocksmith()} data-testid="wiz-export">Export…</button>
+            <button disabled={!song} data-testid="wiz-export"
+              title={txs.some((t) => t.tuning) ? 'Opens the Rocksmith export with your recording as the song audio' : 'Needs a bass or guitar track from step 4 first'}
+              onClick={() => {
+                if (!txs.some((t) => t.tuning)) {
+                  store.showError('Nothing to export yet: run step 4 (Transcribe bass and/or guitar) first. Rocksmith charts come from the bass/guitar tracks it makes.');
+                  return;
+                }
+                ctl!.openRocksmith();
+              }}>Export…</button>
           </Step>
         </ol>
       </section>

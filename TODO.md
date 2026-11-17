@@ -188,18 +188,98 @@ Everything is in the **🎧 Recording** dock tab (toolbar): the wizard, the tool
   roll / drum grid / chords / MIDI, mixer / effects / automation / audio tracks / export; each round
   above says how); Round 5 recording with a real input, Round 4 with a real MIDI keyboard.
 
-## Current Objective
-None: Round 6 is done. Waiting for Dan's go for Round 7.
+## Current Objective: Round 7, "lyrics, singing, real-song accuracy, song starters"
+Standing checks for Dan (keep in "For Dan to check" until he reports): play
+an exported song in Rocksmith 2014; try Rounds 2-6 features.
+
+1. **Lyrics.** Per-note syllables with hyphens and held syllables
+   (melisma), several verses, shown under the staff and in the review view.
+   Paste a block of lyrics onto a melody track and the app splits it into
+   syllables and assigns them to notes (fix by dragging/typing). Import
+   lyrics from MusicXML and Guitar Pro; export them to MusicXML, Guitar Pro,
+   MIDI (lyric events) and PDF. Check: Ode to Joy with a pasted verse; save/
+   reopen and export/re-import keep every syllable.
+2. **Rocksmith vocals.** Import the vocals (lyrics) arrangement from a
+   .psarc when present; export lyrics as a Rocksmith vocals arrangement so
+   they show in the game. Check: round trip of an exported song with lyrics;
+   the helper's checks report no issues (incl. the font-character check).
+3. **Singing synthesis.** Evaluate free engines that can run from the app
+   (DiffSinger acoustic + vocoder models in ONNX on our existing runtime is
+   the first choice; OpenUtau's renderer as second) with a voicebank whose
+   licence allows this use; note it in `CLAUDE.md`. Render a vocal audio
+   track from a melody track + its lyrics, with vibrato, dynamics and breath
+   settings; re-render when notes/lyrics change. If no engine can run from
+   the app, export `.ustx` (OpenUtau) and a Synthesizer V-compatible file,
+   and add "Import rendered vocal" to bring the WAV back in time. Report
+   the choice and honest quality notes. Check: Ode to Joy sung (rendered
+   offline, muted); the rendered pitch follows the melody (measured, within
+   30 cents on held notes); one sound check of 10 s or less.
+4. **Vocals from a recording.** In the Recording tools / wizard: vocal stem
+   -> vocal melody track (a monophonic pitch tracker such as RMVPE/CREPE in
+   ONNX, better than basic-pitch for voice) and lyrics by speech-to-text with
+   word timings (Whisper in ONNX), lined up to the notes. Check: our sung Ode
+   to Joy rendered and transcribed back: note F-score and word accuracy
+   reported (target melody F 0.85+).
+5. **Real-song accuracy (bass and guitar).** Round 6 scored 0.97 on our own
+   renders but only 0.36 against the Hüsker Dü custom chart. That chart is
+   fan-made and may itself be wrong (offset, octave, missed notes), so don't
+   treat custom charts as the truth.
+   - **Main benchmark: Ubisoft's official charts.** Dan owns Rocksmith 2014
+     at `E:\Rocksmith2014`; its `songs.psarc` (on-disc songs) and any
+     official DLC in `dlc\` are professionally charted. Read them in place
+     with the helper (official files have SNG only: convert SNG -> XML with
+     Rocksmith2014.NET). Pick 10-15 songs across styles, tunings (incl. drop
+     and down-tuned) and bass/guitar. Read-only: never modify, copy outside
+     `TestData/private/`, or commit anything from them; delete extracted
+     audio after the run.
+   - **Secondary: custom songs** in `TestData/private/` (report separately,
+     flagged as fan-made).
+   - Score with each chart's own time offset removed, and also report
+     octave-ignored and timing-ignored scores, so a wrong chart and a wrong
+     transcription can be told apart. For the 3 worst songs, list the bars
+     where chart and transcription disagree most, so Dan can listen and say
+     which is right.
+   - Then improve: detect tuning and cent offset (down-tuned / drop tunings,
+     songs not at A440), octave correction for bass (fret/string
+     plausibility, the stem's low-frequency energy), a guitar mode that
+     separates single-note lines from chords, and better onset timing on
+     distorted guitar.
+   Check: before/after F-scores per song (official and custom separately);
+   no worse on our renders.
+6. **"Describe it" song starters.** New > Describe a song: type e.g. "12-bar
+   blues in E, shuffle at 110, guitar, bass, piano and drums, 3 choruses" and
+   the app builds the chord chart, sections, tempo, key, style and lineup,
+   then generates the band (using Rounds 2 and 4). A built-in parser handles
+   the common wording (keys, modes, tempo, feel, styles, instruments, forms:
+   12-bar blues, AABA, verse/chorus, ii-V-I, named progressions); if an
+   `ANTHROPIC_API_KEY` environment variable is set, free-form descriptions
+   go to Claude to fill a JSON song plan (never write the key to the repo,
+   logs or settings). Shows the plan before generating so it can be edited.
+   Check: 15 test descriptions parsed correctly offline (unit tests); one
+   generated and played (muted).
+7. **More sounds.** A sound library manager: add/remove SoundFonts
+   (.sf2/.sf3) and SFZ instruments, pick a sound per track from any
+   installed library, preview, and a short list of recommended free
+   libraries with their licences and download links (Dan downloads them;
+   don't bundle anything whose licence doesn't allow it). Check: a second
+   SoundFont used on one track while others use the default; save/reopen
+   keeps the choice.
+8. **Save/load, undo, regression.** Everything above survives save/reopen
+   and undoes in one step per action; the Round 1-6 app checks pass on the
+   new exe.
+
+### For Dan to check (fill in at end of round)
+- Play an exported song in Rocksmith 2014 (timing, note placement,
+  difficulty levels). Still pending from Round 3.
 
 ## Next Steps (Do Not Start Yet)
 - **Later, unordered:** test item 7 of Round 4 with a real MIDI keyboard and Round 5
   recording with a real audio input (interface / Real Tone Cable).
-- **Round 7 (planned): lyrics, singing and assisted composition.** Lyrics per
-  note shown under the staff; singing synthesis from notes + lyrics (a free
-  engine such as OpenUtau/DiffSinger if it can run from the app, otherwise
-  export to OpenUtau/Synthesizer V and bring the vocal WAV back); "describe
-  it" song starters ("12-bar blues in E, guitar, bass, piano, drums"); better
-  sound libraries / VST3 instrument hosting.
+- **Round 8 (planned): VST3 instruments and effects.** Needs a native host
+  process (C++, e.g. JUCE) with audio routed back into our mixer and offline
+  render; deferred from Round 7 because it is a round on its own.
+- **Later:** Rocksmith tones (pick amp/pedal gear per arrangement instead of
+  DLC Builder's default tone).
 
 ## Technical Notes / Blockers
 - Resolved 2026-11-16: the Wwise blocker (Round 3, item 7). Dan installed Wwise 2023.1.19 at

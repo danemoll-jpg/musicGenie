@@ -290,13 +290,13 @@ Short results: about 20 lines per round, one line per item plus its check.
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
 Rounds 1-6 done: import, score/tab view, playback, undo, autosave; virtual
-band (5 styles); tab editing, techniques, tunings, Rocksmith import/export
-(in-game test still pending Dan); piano roll, chord explorer, progressions,
-drum grid, chord charts, harmony, MIDI + keyboard piano; per-track engine,
-mixer, effects, automation, audio tracks, export; recording to tabs (ONNX
-runtime, beats, stems, audio to notes, drums, review view, Song to Rocksmith
-wizard, sheet music via Audiveris). Next: Round 7 (lyrics, singing, assisted
-composition) once Dan says so.
+band; tab editing, tunings, Rocksmith import/export (in-game test still
+pending Dan); piano roll, chord explorer, drum grid, chord charts, harmony,
+MIDI + keyboard piano; mixer, effects, automation, audio tracks, export;
+recording to tabs (beats, stems, audio to notes, drums, review view, Song to
+Rocksmith wizard, sheet music from PDF). Current round: Round 7 (lyrics,
+singing, vocals from recordings, real-song accuracy, "describe it", sound
+library).
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
 progressions, drums, songChanges, chart, harmony, recording, mix, loudness, audioClips,
