@@ -245,13 +245,13 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Rounds 1-4 done: import, score/tab view, playback, mixer basics, undo,
-autosave; virtual band (5 styles); tab editing, techniques, tunings,
-Rocksmith .psarc import/export (in-game test still pending Dan); piano roll,
-chord explorer, progression helper, drum grid, chord charts, key/time/tempo
-changes, harmony, MIDI keyboard. Round 5 done: per-track playback engine, mixer,
-effects + presets, automation, audio tracks (import/record/edit, media folder, .mgpack),
-keyboard piano, export (WAV/MP3/stems/MIDI/MusicXML/GP/PDF). Next: Dan's checks (TODO.md).
+Rounds 1-5 done: import, score/tab view, playback, undo, autosave; virtual
+band (5 styles); tab editing, techniques, tunings, Rocksmith import/export
+(in-game test still pending Dan); piano roll, chord explorer, progressions,
+drum grid, chord charts, harmony, MIDI + keyboard piano; per-track engine,
+mixer, effects, automation, audio tracks, export. Current round: Round 6,
+recording to tabs (beat detection, stems, audio to notes, drums, review view,
+Song to Rocksmith wizard, PDF score reading).
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
 progressions, drums, songChanges, chart, harmony, recording, mix, loudness, audioClips),

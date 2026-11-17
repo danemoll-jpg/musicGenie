@@ -199,14 +199,85 @@ Everything is in the dock: **🎚 Mixer** (toolbar), 〰 Automation, 🎙 Audio;
   of 32nd/triplet-heavy songs quantises to 16ths (the exported file itself has every note); MP3
   encoder is LGPL (lamejs, separate chunk).
 
-## Current Objective
-Round 5 is done; waiting for Dan's checks above before planning Round 6.
+## Current Objective: Round 6, "recording to tabs"
+Goal: take a real song recording, find its beats, split it into
+instruments, turn the bass/guitar/drums into editable tracks, fix them up
+against the audio, and (for guitar/bass) export a Rocksmith chart that plays
+along with the original recording. Plus reading sheet music from a PDF.
+Standing checks for Dan (keep in "For Dan to check" until he reports): play
+an exported song in Rocksmith 2014; try Rounds 2-5 features.
+
+Design rules for this round:
+- Plug in existing open-source tools/models; don't train or write our own
+  ML. Note each tool's and model's licence in `CLAUDE.md`.
+- Heavy jobs run in the background at Below Normal priority with progress
+  and Cancel; the app stays usable. Models download on first use (with
+  size shown and a progress bar) into the app's data folder, not the repo.
+- Results are ordinary tracks/clips: editable and undoable like anything
+  else; the original recording is never changed.
+- Test material: render our own songs to audio (the notes are known, so
+  accuracy can be measured), plus the private Hüsker Dü file (real audio +
+  a human-made bass chart) as a real-world benchmark. Never commit the
+  private file or anything derived from it.
+
+1. **ML runtime (do first, report the choice).** Pick how models run on
+   Dan's PC: ONNX Runtime from Node (preferred if the models below have
+   ONNX versions) or a bundled Python environment. Use the GPU when present
+   (DirectML/CUDA), otherwise the CPU. Check: a test model runs; report
+   CPU/GPU used and the time.
+2. **Beats and tempo from audio.** Detect beats and downbeats in a recording
+   and build the tempo map and bars from them (time signature guessed,
+   changeable). Editable beat markers: drag a beat, set the downbeat, tap
+   tempo over a section; audio clips never move. Check: our rendered songs
+   (steady, a tempo change, a 3/4 section): beats within 20 ms; Hüsker Dü:
+   compare with its chart's beat markers and report the average error.
+3. **Stem separation.** Split a recording into vocals, drums, bass and other
+   (and guitar/piano if a 6-stem model is available, e.g. Demucs htdemucs_6s),
+   each as an audio track. Check: run on a rendered band mix; report the
+   time taken and how much of each stem's energy is the right instrument.
+4. **Audio to notes.** Transcribe a stem or any clip (e.g. Spotify's
+   basic-pitch) into a new track, quantised to the tempo map (choose grid,
+   with a "keep loose timing" option), kept within the chosen instrument's
+   range; guitar/bass get playable string/fret positions; chord symbols from
+   the existing chord detection. Check: rendered bass and guitar parts: note
+   F-score with 50 ms onset tolerance, target 0.9 or better on bass; Hüsker
+   Dü bass stem vs its chart: report the F-score (no target, benchmark).
+5. **Drums to a drum track.** Transcribe the drum stem into kick, snare,
+   hi-hat (open/closed), toms, crash and ride (an existing drum-transcription
+   model if a usable free one exists; otherwise onset detection plus
+   classification for at least kick/snare/hi-hat). Check: rendered Rock and
+   Jazz drums: F-score per kit piece reported, target 0.85+ on kick/snare.
+6. **Review and fix view.** Waveform (and spectrogram toggle) lined up above
+   the score/tab; A/B buttons: original / stem / transcription / stem +
+   transcription; slow the audio down to 25-100% **with pitch kept**, loop a
+   range; click a note to hear it against the audio. Normal editing works
+   here. Check: screenshot; pitch stays the same at 50% speed (measured).
+7. **"Song to Rocksmith" wizard.** One guided flow: load a recording -> beats
+   -> stems -> transcribe bass and/or guitar -> review -> Rocksmith export
+   using the ORIGINAL recording as the song audio (charts lined up to it).
+   Every step can be redone or skipped. Check: run on a rendered song end to
+   end; the exported .psarc round-trips with its notes lined up to the audio
+   within 20 ms; run on the Hüsker Dü file and report (don't keep outputs).
+8. **Sheet music from PDF or photo.** Use Audiveris (installed locally by
+   the app or by you, note how in `CLAUDE.md`) to turn a PDF/image score into
+   MusicXML, then import it; show which pages/measures it was unsure about.
+   Check: export a PDF from our app (Round 5), read it back, compare note
+   counts and report the match. Plus save/load, undo and the Round 1-5 app
+   checks on the new exe.
+
+### For Dan to check (fill in at end of round)
+- Play an exported song in Rocksmith 2014 (timing, note placement,
+  difficulty levels). Still pending from Round 3.
 
 ## Next Steps (Do Not Start Yet)
 - **Later, unordered:** test item 7 of Round 4 with a real MIDI keyboard and Round 5
-  recording with a real audio input (interface / Real Tone Cable); better sound libraries / VST3 instruments, singing, "describe it" assisted
-  composition, PDF score reading (Audiveris), audio to notes (basic-pitch),
-  stem splitting (Demucs). Plug these in from existing tools, don't build them.
+  recording with a real audio input (interface / Real Tone Cable).
+- **Round 7 (planned): lyrics, singing and assisted composition.** Lyrics per
+  note shown under the staff; singing synthesis from notes + lyrics (a free
+  engine such as OpenUtau/DiffSinger if it can run from the app, otherwise
+  export to OpenUtau/Synthesizer V and bring the vocal WAV back); "describe
+  it" song starters ("12-bar blues in E, guitar, bass, piano, drums"); better
+  sound libraries / VST3 instrument hosting.
 
 ## Technical Notes / Blockers
 - Resolved 2026-11-16: the Wwise blocker (Round 3, item 7). Dan installed Wwise 2023.1.19 at
