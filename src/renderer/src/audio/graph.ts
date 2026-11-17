@@ -151,6 +151,8 @@ export class MixGraph {
   readonly strips = new Map<string, Strip>();
   private masterFxOut: GainNode;
   song: Song | null = null;
+  /** Review A/B (Round 6): only these tracks are heard; the song's mute/solo stay as they are. */
+  listenOnly: Set<string> | null = null;
 
   constructor(readonly ctx: BaseAudioContext, dest: AudioNode, readonly env: FxEnv) {
     this.masterIn = ctx.createGain();
@@ -186,7 +188,7 @@ export class MixGraph {
       s.chain.sync(t.mixer.fx ?? [], auto);
       if (!auto.has('volume')) set(s.vol.gain, faderGain(t.mixer.volume));
       if (!auto.has('pan')) set(s.pan.pan, t.mixer.pan);
-      set(s.mute.gain, trackGain(song, i) > 0 ? 1 : 0);
+      set(s.mute.gain, this.listenOnly ? (this.listenOnly.has(t.id) ? 1 : 0) : trackGain(song, i) > 0 ? 1 : 0);
       set(s.sendR.gain, t.mixer.sends?.reverb ?? 0);
       set(s.sendD.gain, t.mixer.sends?.delay ?? 0);
     });

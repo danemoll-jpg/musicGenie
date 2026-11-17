@@ -61,7 +61,49 @@ const api = {
     ipcRenderer.invoke('print-pdf', args),
   printJob: (): Promise<unknown> => ipcRenderer.invoke('print-job'),
   printReady: (): void => ipcRenderer.send('print-ready'),
+  // ----- Round 6 -----
+  mlModels: (): Promise<MlModelStatus[]> => ipcRenderer.invoke('ml-models'),
+  mlDownload: (id: string): Promise<void> => ipcRenderer.invoke('ml-download', id),
+  mlModelPath: (id: string, file: string): Promise<string> => ipcRenderer.invoke('ml-model-path', id, file),
+  mlRun: <T = unknown>(cmd: string, args: unknown): Promise<T> => ipcRenderer.invoke('ml-run', cmd, args),
+  mlCancel: (): Promise<void> => ipcRenderer.invoke('ml-cancel'),
+  mlInfo: (): Promise<{ modelsDir: string; pid: number; devices: { vendorId: number; deviceId: number; active: boolean; driverVersion?: string }[] }> => ipcRenderer.invoke('ml-info'),
+  onMlProgress: (fn: (p: MlProgress) => void): (() => void) => {
+    const h = (_e: unknown, p: MlProgress) => fn(p);
+    ipcRenderer.on('ml-progress', h);
+    return () => ipcRenderer.removeListener('ml-progress', h);
+  },
+  removePaths: (paths: string[]): Promise<number> => ipcRenderer.invoke('remove-paths', paths),
+  omr: (args: { input: string; outDir: string }): Promise<OmrResult> => ipcRenderer.invoke('omr', args),
+  omrStatus: (): Promise<{ installed: boolean; exe: string | null; version: string | null; size: number; licence: string; url: string }> => ipcRenderer.invoke('omr-status'),
+  omrInstall: (): Promise<{ exe: string }> => ipcRenderer.invoke('omr-install'),
 };
+
+export interface MlModelStatus {
+  id: string;
+  title: string;
+  use: string;
+  licence: string;
+  source: string;
+  files: { name: string; url: string; size: number }[];
+  bytes: number;
+  installed: boolean;
+  dir: string;
+}
+export interface MlProgress {
+  kind: 'download' | 'job' | 'omr';
+  id?: string | number;
+  stage: string;
+  done: number;
+  total: number;
+}
+export interface OmrResult {
+  mxl: string[];
+  log: string;
+  /** Sheets / measures Audiveris flagged. */
+  issues: { sheet: number; measure?: number; text: string }[];
+  ms: number;
+}
 
 export type MgApi = typeof api;
 

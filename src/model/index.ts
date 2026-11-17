@@ -26,3 +26,5 @@ export * from './recording';
 export * from './mix';
 export * from './loudness';
 export * from './audioClips';
+export * from './beatMap';
+export * from './transcribe';

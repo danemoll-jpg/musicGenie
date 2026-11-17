@@ -8,6 +8,8 @@ import { DEFAULT_SOUNDFONT, ScorePlayer, type PlayerStatus } from './player';
 import { BackingRow, CursorOverlay, EditBar, RocksmithDialog, TuningControls, TuningDialog } from './Round3';
 import { ChangesDialog, ChartDialog, Dock, HarmonyMenu, KbdPianoToggle } from './Round4';
 import { ExportDialog } from './Round5';
+import { JobBar } from './Round6';
+import { ReviewView } from './Review';
 import { liveSynth } from './audio/liveSynth';
 import type { MidiController } from './midi';
 import type { AppState, Store } from './store';
@@ -216,6 +218,8 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
             onClick={() => store.openDock(state.dock ? null : 'roll')}>🎹 Compose</button>
           <button className={state.dock === 'mixer' ? 'chip' : ''} disabled={!song} data-testid="mixer-toggle" title="Mixer: faders, meters, effects, sends, master"
             onClick={() => store.openDock(state.dock === 'mixer' ? null : 'mixer')}>🎚 Mixer</button>
+          <button className={state.dock === 'rec' ? 'chip' : ''} data-testid="rec-toggle" title="Recording to tabs: beats, stems, audio to notes, drums, review, Song to Rocksmith, sheet music from PDF"
+            onClick={() => store.openDock(state.dock === 'rec' ? null : 'rec')}>🎧 Recording</button>
           {song && <KbdPianoToggle state={state} store={store} />}
           <button disabled={!song} data-testid="rs-open" title="Export guitar/bass parts as a Rocksmith 2014 song" onClick={() => store.openRsExport(true)}>⇪ Rocksmith…</button>
         </div>
@@ -224,6 +228,7 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
           <SettingsMenu state={state} store={store} soundFont={status?.soundFont ?? DEFAULT_SOUNDFONT} />
         </div>
       </header>
+      <JobBar />
       <EditBar state={state} store={store} player={player} />
       <TuningDialog state={state} store={store} />
       <RocksmithDialog state={state} store={store} player={player} />
@@ -246,6 +251,7 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
           )}
         </aside>
         <div className="center">
+          <ReviewView state={state} store={store} player={player} status={status} />
           <section className="score" ref={scrollRef}>
             <div ref={hostRef} className="at-host" />
             <CursorOverlay state={state} player={player} status={status} />

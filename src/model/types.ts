@@ -32,6 +32,8 @@ export interface Song {
   chart?: { text: string };
   /** Schema v5: master bus, Reverb and Delay send buses. Missing = defaults (limiter on master). */
   mix?: SongMix;
+  /** Schema v6: the original recording this song was made from (an audio clip on an audio track). */
+  recording?: { trackId: string; clipId: string };
 }
 
 export interface BackingTrack {
@@ -183,6 +185,21 @@ export interface Track {
   audio?: { clips: AudioClip[]; monitor?: boolean };
   /** Schema v5: parameters that change over time. */
   automation?: AutoLane[];
+  /** Schema v6: made from a recording: a separated stem, or notes transcribed from audio. */
+  analysis?: TrackAnalysis;
+  /** Schema v6: read from sheet music: places the reader was unsure about. */
+  omr?: { issues: { page: number; bar?: number; text: string }[] };
+}
+
+export interface TrackAnalysis {
+  kind: 'stem' | 'transcription';
+  /** Stem name (drums, bass, guitar, piano, vocals, other). */
+  stem?: string;
+  /** The audio track this was made from. */
+  sourceTrackId?: string;
+  /** Transcription settings used. */
+  grid?: string;
+  loose?: boolean;
 }
 
 export type SplitPart = 'melody' | 'harmony' | 'bass';

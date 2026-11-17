@@ -15,6 +15,7 @@ import { Progressions } from './Progressions';
 import { MixerView } from './Mixer';
 import { AutomationPanel } from './Automation';
 import { AudioPanel } from './AudioTracks';
+import { RecordingPanel } from './Round6';
 import type { AppState, DockTab, Store } from './store';
 
 const TABS: { id: DockTab; label: string; title: string }[] = [
@@ -26,14 +27,28 @@ const TABS: { id: DockTab; label: string; title: string }[] = [
   { id: 'mixer', label: '🎚 Mixer', title: 'Faders, pan, meters, effects, sends, master' },
   { id: 'auto', label: '〰 Automation', title: 'Volume, pan and effect settings that change over time' },
   { id: 'audio', label: '🎙 Audio', title: 'Audio tracks: import, record, move, trim, split, fades' },
+  { id: 'rec', label: '🎧 Recording', title: 'Recording to tabs: beats, stems, audio to notes, drums, review, Song to Rocksmith, sheet music' },
 ];
 
 export function Dock({ state, store, status, midi }: { state: AppState; store: Store; status: PlayerStatus | null; midi: MidiController }) {
   const song = state.song;
-  if (!song || !state.dock) return null;
+  if (!state.dock) return null;
+  if (!song) {
+    // The Recording tab works without a song (it starts one from a recording).
+    if (state.dock !== 'rec') return null;
+    return (
+      <div className="dock tall" data-testid="dock">
+        <div className="dock-tabs">
+          <button className="chip" data-testid="dock-rec">🎧 Recording</button>
+          <button className="close" onClick={() => store.openDock(null)} title="Close">✕</button>
+        </div>
+        <div className="dock-body"><RecordingPanel state={state} store={store} status={status} /></div>
+      </div>
+    );
+  }
   const ti = Math.min(state.selTrack, song.tracks.length - 1);
   return (
-    <div className={`dock ${state.dock === 'mixer' || state.dock === 'audio' ? 'tall' : ''}`} data-testid="dock">
+    <div className={`dock ${state.dock === 'mixer' || state.dock === 'audio' || state.dock === 'rec' ? 'tall' : ''}`} data-testid="dock">
       <div className="dock-tabs">
         {TABS.map((t) => (
           <button key={t.id} className={state.dock === t.id ? 'chip' : ''} title={t.title} onClick={() => store.openDock(t.id)} data-testid={'dock-' + t.id}>{t.label}</button>
@@ -53,6 +68,7 @@ export function Dock({ state, store, status, midi }: { state: AppState; store: S
         {state.dock === 'mixer' && <MixerView state={state} store={store} />}
         {state.dock === 'auto' && song.tracks.length > 0 && <AutomationPanel state={state} store={store} status={status} />}
         {state.dock === 'audio' && <AudioPanel state={state} store={store} status={status} />}
+        {state.dock === 'rec' && <RecordingPanel state={state} store={store} status={status} />}
       </div>
     </div>
   );

@@ -21,9 +21,23 @@ parts as Rocksmith 2014 custom songs. Full vision and roadmap:
   read and write .psarc files and generate difficulty levels. Converting audio
   to .wem needs Wwise 2019/2021/2022/2023 installed on Dan's PC (DLC Builder
   documents 2019 and 2021; the library also accepts 2022 and 2023).
-- **Later plug-in tools, not built ourselves:** Audiveris (reading PDF scores),
-  basic-pitch (audio to notes), Demucs (splitting a recording into stems),
-  OpenUtau/DiffSinger or Synthesizer V export (singing).
+- **ML runtime (Round 6, decided 2026-11-16):** ONNX Runtime from Node
+  (`onnxruntime-node` 1.31.1, MIT) in an Electron utility process; DirectML on the GPU
+  (GTX 1660 Ti here) with CPU fallback. No Python. Models are downloaded on first use.
+- **Plug-in tools/models (not built ourselves), with licences:**
+  - Beat This! (CPJKU, beats + downbeats): code and weights **MIT**; ONNX export
+    `final0-v2.onnx` by ashudesai/songbird-models (MIT), pinned to commit 813eff2.
+    (The repo's first `final0.onnx` froze the time axis: beats stop after ~6 s per chunk.)
+  - HT-Demucs 6 stems (Meta, stems): code **MIT**; the v4 weights are **CC BY-NC 4.0**
+    (non-commercial) per the export's README. ONNX export HRSadeghi/demucs-onnx (MIT), commit
+    9128f6e; our STFT/overlap host code is ported from its JS binding (MIT).
+  - basic-pitch (Spotify, audio to notes): **Apache-2.0**, `nmp.onnx` from tag v0.4.0; note
+    decoding ported from its Python.
+  - Drums: no usable free drum-transcription model in ONNX: our own onset detection +
+    band-energy rules (`src/ml/drums.ts`), no ML.
+  - Audiveris 5.11.0 (sheet music from PDF/images): **AGPL-3.0**, run as a separate program
+    (never linked); the official windowsConsole MSI bundles its own Java runtime.
+  - Later: OpenUtau/DiffSinger or Synthesizer V export (singing).
 
 ## Code Style & Architecture
 - **One music model is the source of truth** (`src/model/`). Song -> tracks
@@ -80,6 +94,13 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   `test-results/report-round5.json`. No sound checks. Effects are checked offline on test
   signals (`src/renderer/src/fxChecks.ts`); recording uses a simulated cable (output -> delay ->
   input, `recorder.openSimulated`), so no real input device is needed.
+- Round 6 app checks: `npm run e2e:r6` (packaged) / `npm run e2e:r6:dev`; report
+  `test-results/report-round6.json`. No sound checks (pitch at 50 % speed is measured on the review
+  player's own output, speakers 0). Uses a shared test profile `%TEMP%\musicgenie-r6-models` that
+  keeps only downloaded models between runs (everything else is wiped before/after);
+  `--clean-models` deletes it. Our test songs are rendered once into `test-results/r6-fixtures/`
+  (mix + each part + truth JSON). Items 2/4/7 also benchmark the private Hüsker Dü file
+  (skipped without it; its derived files are deleted).
 - Round 4 app checks: `npm run e2e:r4` (packaged) / `npm run e2e:r4:dev`; report
   `test-results/report-round4.json`. No sound checks (nothing unmutes). Item 7 drives the
   MIDI recorder with a simulated input (`mgTest.midiSimulate`); no keyboard needed.
@@ -109,7 +130,9 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   "use it in your software projects", may repackage). `public/soundfont/` and
   `public/font/` are gitignored (the alphaTab Vite plugin fills them). The user's
   SoundFont path is in `userData/settings.json` and in the project (`playback.soundFont`).
-- Project format v5 (`SCHEMA_VERSION = 5`; v5 adds `song.mix` (master fx/fader, Reverb + Delay
+- Project format v6 (`SCHEMA_VERSION = 6`; v6 adds `song.recording` (the original recording's
+  track/clip), `track.analysis` (stem / transcription tag) and `track.omr` (bars the sheet-music
+  reader was unsure of). v5 adds `song.mix` (master fx/fader, Reverb + Delay
   send buses), `mixer.fx` / `mixer.sends`, `track.automation` (lanes of bar/tick points) and
   `track.audio.clips` (audio tracks; clip files saved RELATIVE to `<project>_media\`, absolute
   in memory: `relativizeMedia` / `absolutizeMedia`). v4 adds `tempos[].ramp` / `tempos[].rampTo` for gradual
@@ -192,6 +215,27 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   unpacks to `userData/packages/` and leaves the file path empty (Save asks where).
 - Never use native dialogs for questions (they would show over a hidden test window):
   `store.ask()` shows an in-app one.
+- Round 6 analysis: `src/ml/` is pure (DSP, Demucs/basic-pitch/Beat This! host code, drums,
+  WAV I/O, pitch) and unit-tested; `src/main/mlWorker.ts` (utility process, Below Normal, one job at
+  a time, Cancel = kill) runs it; `src/main/ml.ts` holds the model catalogue (pinned URLs + exact
+  sizes) and downloads into **`userData\models\<id>\`** (beat-this 83 MB, demucs-6s 110 MB,
+  basic-pitch 0.23 MB). Audiveris is unpacked (`msiexec /a`, no install, no admin prompt) into
+  **`userData\tools\audiveris\`** (`src/main/omr.ts`). Temporary audio: `userData\ml-temp`
+  (cleared by `analysis.cleanTemp()`), stems go to the project's `<name>_media` folder (or
+  `userData\media` before the first save), OMR output to `userData\omr\`.
+- Beat This! runs on the CPU on purpose (DirectML recompiles per chunk shape: ~3x slower);
+  Demucs and basic-pitch use DirectML. Beats get sub-frame (parabolic) peaks; the tempo map is
+  fitted to the beats (`src/model/beatMap.ts`, 12 ms tolerance). Beat edits (drag, set
+  downbeat, tap tempo, re-bar) never move audio clips; rebuilding bars keeps notes at their time.
+- basic-pitch onsets are moved 25 ms earlier (measured lag, see `src/ml/basicPitch.ts`); single-
+  note parts merge weak re-attacks; bass keeps the lowest strong note (drops harmonics).
+- The resampler (`src/ml/dsp.ts`) is a Kaiser-windowed sinc; non-integer ratios (48 kHz) are
+  covered by a unit test since a table-index bug once produced NaN.
+- Review view (`Review.tsx`): the score switches to alphaTab's horizontal layout; waveform /
+  spectrogram drawn per bar from `boundsLookup` so they line up; A/B uses `engine.setListenOnly`
+  (no song edit); the recording/stem plays through a second `BackingPlayer` (`<audio>`,
+  `preservesPitch`), so 25-100 % speed keeps the pitch.
+- Swing is applied at playback only, so test truth for swung styles (Jazz) uses `swingTick`.
 
 ## Testing on Dan's PC: STANDING RULES
 Dan uses his PC while you test. Your test runs must not be heard and must not
@@ -245,20 +289,22 @@ Short results: about 20 lines per round, one line per item plus its check.
 
 ## Where things stand
 **Always check `TODO.md` for the current objective before starting work.**
-Rounds 1-5 done: import, score/tab view, playback, undo, autosave; virtual
+Rounds 1-6 done: import, score/tab view, playback, undo, autosave; virtual
 band (5 styles); tab editing, techniques, tunings, Rocksmith import/export
 (in-game test still pending Dan); piano roll, chord explorer, progressions,
 drum grid, chord charts, harmony, MIDI + keyboard piano; per-track engine,
-mixer, effects, automation, audio tracks, export. Current round: Round 6,
-recording to tabs (beat detection, stems, audio to notes, drums, review view,
-Song to Rocksmith wizard, PDF score reading).
+mixer, effects, automation, audio tracks, export; recording to tabs (ONNX
+runtime, beats, stems, audio to notes, drums, review view, Song to Rocksmith
+wizard, sheet music via Audiveris). Next: Round 7 (lyrics, singing, assisted
+composition) once Dan says so.
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
-progressions, drums, songChanges, chart, harmony, recording, mix, loudness, audioClips),
-`src/export` (MIDI, MusicXML, Guitar Pro writers),
-`src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
-`src/main` (Electron, settings.json, Rocksmith helper process), `src/preload`,
-`src/renderer` (React UI, Band panel, dialogs, Round3.tsx edit bar/tuning/export dialog,
-editor keys, player, store, test API; `audio/` engine, graph, fx, worklet, offline, clips,
-recorder; Mixer/Automation/AudioTracks/Round5 export dialog, PrintView), `helpers/rocksmith`
-(.NET helper + library submodule), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).
+progressions, drums, songChanges, chart, harmony, recording, mix, loudness, audioClips,
+beatMap, transcribe), `src/ml` (pure analysis host code), `src/export` (MIDI, MusicXML,
+Guitar Pro writers), `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
+`src/main` (Electron, settings.json, Rocksmith helper process, ml worker + models, Audiveris),
+`src/preload`, `src/renderer` (React UI, Band panel, dialogs, Round3.tsx edit bar/tuning/export
+dialog, editor keys, player, store, test API; `audio/` engine, graph, fx, worklet, offline, clips,
+recorder; Mixer/Automation/AudioTracks/Round5 export dialog, PrintView; Round6.tsx recording
+panel + wizard, analysis.ts, Review.tsx, omr.ts), `helpers/rocksmith` (.NET helper + library
+submodule), `tests/unit`, `tests/e2e`, `TestData` (sources in its README).

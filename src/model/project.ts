@@ -6,8 +6,10 @@ import type { Song } from './types';
 // v4 (Round 4): tempos[].ramp / rampTo (gradual tempo changes), song.chart (chord chart text).
 // v5 (Round 5): song.mix (master + Reverb/Delay buses), mixer.fx / mixer.sends, track.automation,
 //     track.audio (audio clips; media in <name>_media next to the project).
+// v6 (Round 6): song.recording (which audio clip is the original recording), track.analysis
+//     (stem / transcription tags), track.omr (pages/measures the sheet-music reader was unsure of).
 // Older files load as-is (every addition is optional).
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export interface ProjectFile {
   schemaVersion: number;

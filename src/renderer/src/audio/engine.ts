@@ -276,6 +276,12 @@ export class Engine {
     if (!this.lanes.length && this.autoTimer) { clearInterval(this.autoTimer); this.autoTimer = null; }
   }
 
+  /** Review A/B: hear only these tracks (null = the song's own mute/solo). Never edits the song. */
+  setListenOnly(ids: string[] | null) {
+    this.graph.listenOnly = ids ? new Set(ids) : null;
+    if (this.song) this.graph.sync(this.song, (t) => new Set((t.automation ?? []).filter((l) => l.points.length).map((l) => l.param)));
+  }
+
   /** alphaTab plays the metronome / count-in on the channel after the highest one the song uses. */
   get metronomeChannel(): number {
     return (this.synth as unknown as { sequencer?: { metronomeChannel: number } } | null)?.sequencer?.metronomeChannel ?? 16;

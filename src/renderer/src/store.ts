@@ -114,7 +114,7 @@ export interface AppState {
   kbdPiano: boolean;
 }
 
-export type DockTab = 'roll' | 'drums' | 'chords' | 'prog' | 'midi' | 'mixer' | 'auto' | 'audio';
+export type DockTab = 'roll' | 'drums' | 'chords' | 'prog' | 'midi' | 'mixer' | 'auto' | 'audio' | 'rec';
 
 type Listener = (s: AppState) => void;
 

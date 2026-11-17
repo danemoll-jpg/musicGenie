@@ -20,6 +20,8 @@ export class BackingPlayer {
   private audio = new Audio();
   private ctx: AudioContext | null = null;
   private gain: GainNode | null = null;
+  /** Analyser on this player's own output (before the master bus): proves what it plays. */
+  tap: AnalyserNode | null = null;
   private url: string | null = null;
   private track: BackingTrack | null = null;
   private pts: TempoPoint[] = [];
@@ -30,6 +32,8 @@ export class BackingPlayer {
 
   constructor(private readonly player: ScorePlayer) {
     this.audio.preload = 'auto';
+    // Slowed-down playback keeps its pitch (Chromium time-stretches the media element).
+    this.audio.preservesPitch = true;
     player.on((s) => this.follow(s));
   }
 
@@ -40,6 +44,9 @@ export class BackingPlayer {
     this.gain = this.ctx.createGain();
     src.connect(this.gain);
     this.gain.connect(this.ctx.destination); // -> master bus (see masterBus.ts)
+    this.tap = this.ctx.createAnalyser();
+    this.tap.fftSize = 32768;
+    this.gain.connect(this.tap);
     this.applyVolume();
   }
 
@@ -50,7 +57,11 @@ export class BackingPlayer {
 
   /** Follow the song: load/unload the recording, volume/mute, tempo map. */
   async setSong(song: Song | null) {
-    const b = song?.backing ?? null;
+    return this.setTrack(song, song?.backing ?? null);
+  }
+
+  /** Play `b` (any recording) in sync with `song` (the review view uses this for stems). */
+  async setTrack(song: Song | null, b: BackingTrack | null) {
     if (song) this.pts = tempoPoints(song);
     const pathChanged = (b?.path ?? null) !== this.status.path;
     this.track = b ? { ...b } : null;

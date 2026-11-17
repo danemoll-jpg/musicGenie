@@ -8,73 +8,7 @@
 - One check per item, done in the built app, with screenshots you look at.
 
 ## Completed Tasks
-Rounds 1-2 are archived in `TODO-ARCHIVE.md` (grep it, never read it in full).
-### Round 3, "tab editing + Rocksmith" (2026-11-16): DONE in the app; in-game Rocksmith test still pending Dan
-Checks ran in the packaged app (`npm run e2e:r3`), hidden (off-screen, never shown or
-focusable) and `--mute`; speaker level measured 0 on every playing step (techniques
-playback pre 0.14, backing track pre 0.66, offline render 0). **No sound checks this round.**
-Unit tests 107/107 (`npm test`). Rounds 1-2 app checks re-run on the 0.3.0 exe: all pass.
-Screenshots: `test-results/r3-*.png`; report `test-results/report-round3.json`.
-1. Note editing: **done.** Edit mode (✎ Edit, or New ▸ Guitar/Bass song): click a beat; tab =
-   fret digits (two quick digits = 10-24), ↑↓ strings; notation = A-G (Shift adds to chord),
-   ↑↓ pitch; whole-64th, dot, triplet, tie, rest, insert/delete beat and bar, copy/paste
-   (beat or selected bars); undoable; generated tracks show "edited". Check: 16-note bass riff
-   typed with keys matched exactly (`r3-1-bass-riff.png`); unit tests per edit, bars stay full.
-2. Techniques: **done.** Palette + keys for hammer-on/pull-off, slide (shift/legato/out up/down),
-   bend (½, full, 1½, bend+release), vibrato, palm mute, fret mute, harmonic, pinch, tap, slap,
-   pop, accent, tremolo. Check: all 20 drawn on a tab (`r3-2-techniques.png`), played (muted),
-   save -> reopen identical.
-3. Tunings and capo: **done.** Presets (14 guitar, 6 bass) + custom dialog; keep the sound
-   (frets re-placed) or keep the frets; capo 0-12. Check: E-G-A riff -> Drop D keep-pitch frets
-   2/5/7, keep-frets pitches D/F/G (`r3-3-drop-d.png`); unit tests.
-4. .NET helper: **done.** `helpers/rocksmith/MgRocksmith` (F#, net8.0) over Rocksmith2014.NET
-   v3.5.0 (MIT, submodule); JSON lines over stdin/stdout; read, readProject, readXml, list, write,
-   check, findWwise, findRocksmith. Check: lists the reference file's 18 entries.
-5. .psarc import: **done.** File > Open takes .psarc, DLC Builder .rs2dlc and arrangement .xml.
-   Check: reference bass imports with 541 notes = hardest levels (541) = the file's source XML
-   (541); 108 bars, sections, tuning; song audio plays as a "Song audio" row (vol, mute, start
-   offset): pre-gain 0.66, speakers 0, **16 ms off the cursor at 30 s** (`r3-5-*.png`).
-6. Audio for export: **done.** alphaTab offline render (~105x real time, silent) or a loaded
-   recording (WAV/MP3/OGG/FLAC + offset). Check: Ode Rock mix WAV 38 401 ms vs song 38 400 ms
-   (1 ms); "without the exported parts" also renders.
-7. Rocksmith export: **done.** Dialog: parts +
-   Lead/Rhythm/Bass/Bonus, title/artist/album/year/art, preview start, audio choice, copy to
-   `E:\Rocksmith2014\dlc`; writes notes, chords + fingerings, techniques, beats, sections,
-   COUNT/END phrases, anchors; DD generated (14/14/11 levels). Check: Ode Rock bass, rhythm and
-   lead: **arrangement checks 0 issues**; Wwise 2023.1.19 made the song + preview .wem and the
-   `_p.psarc` was built (1.06 MB, stage "done"), plus XML, WAV, cover and `.rs2dlc`
-   (`r3-7-*.png`). Refuses non-guitar/bass and wrong string counts with a message. Without
-   Wwise it stops at that step and keeps everything else.
-8. Round trip: **done.** Check: reopened the export, 121/365/62 notes, **0 differences** in
-   pitch/string/fret/techniques, same sections and tunings (plus 1 lead-in and 1 tail bar, by
-   design); the built `_p.psarc` read back has 121/365/62 notes, 14/14/11 levels and its .wem
-   audio. Reference bass import -> export (full .psarc build): 541 notes out, 541 in the
-   written XML, 0 check issues; that copy is deleted after the check.
-
-Dan's check list for Round 3 (For Dan to check):
-- Play an exported song in Rocksmith 2014 (timing, note placement, difficulty levels)
-- Run `dist\musicGenie-0.3.0-portable.exe` (or `npm run dev`). New ▸ Bass song: click a beat,
-  type frets (1 then 2 quickly = 12), ←→ beats, ↑↓ strings, `]`/`[` shorter/longer, `.` dot;
-  try the technique buttons (or H, S, B, V, M, X, N, T...). Ctrl+Z undoes each step.
-- A guitar track's row has Tuning and Capo: pick Drop D; "…" opens custom tuning with
-  "keep the sound" / "keep the frets".
-- Open `TestData\private\Husker-Du_Could-You-Be-The-One_v1_p.psarc`: the bass tab should play
-  along with the song audio ("Song audio" row: volume, mute, start offset).
-- Wwise 2023.1.19 is installed (`C:\Audiokinetic\Wwise2023.1.19.8928`); musicGenie finds it
-  by itself. Don't take the Launcher's 2026 upgrade offer for this (Rocksmith tools need
-  2019-2023); having 2026 installed alongside is fine.
-- **Loading the exported song in Rocksmith 2014:** load a song with guitar/bass parts (or the
-  Ode to Joy Rock band), ⇪ Rocksmith…, tick the parts, tick "Copy into E:\Rocksmith2014\dlc",
-  Export. That writes `Documents\musicGenie\Rocksmith\<Artist>_<Title>\<Artist>_<Title>_v1_p.psarc`
-  and copies it into `E:\Rocksmith2014\dlc` (or copy it there yourself). Custom songs need the
-  CDLC patch: your `E:\Rocksmith2014` already has `D3DX9_42.dll` (the CDLC enabler). Start
-  Rocksmith 2014 > Learn a Song > search the title or artist. Without Wwise: open the `.rs2dlc`
-  from the same folder in DLC Builder and press Build > Release (it converts the audio).
-- Known limits: the built .psarc has not been tried in the game yet (that's your check);
-  the tone is DLC Builder's default per arrangement; imports quantise to 32nd notes (no
-  triplets); a Rocksmith import's tempo changes every beat (only big changes are drawn);
-  the exported song gets a ~2 s count-in bar and a 1-bar ending.
-
+Rounds 1-3 are archived in `TODO-ARCHIVE.md` (grep it, never read it in full).
 ### Round 4, "composition" (2026-11-16): DONE in the app (Dan moved on; no real MIDI keyboard to test with, so item 7 is verified with simulated input only)
 Checks ran in the packaged 0.4.0 app (`npm run e2e:r4`), hidden (off-screen, never shown or
 focusable) and `--mute`; speaker level measured 0 on every step that made sound (piano-roll
@@ -180,94 +114,82 @@ Everything is in the dock: **🎚 Mixer** (toolbar), 〰 Automation, 🎙 Audio;
    alphaTab moves the metronome channel; an idle audio device crashed the page after minutes, so the
    engine now suspends audio after 5 s of silence (like alphaTab did).
 
-### For Dan to check (fill in at end of round)
+### Round 6, "recording to tabs" (2026-11-16): DONE in the app (real-world benchmark on the private Hüsker Dü file; in-game Rocksmith test still pending Dan)
+Checks ran in the packaged 0.6.0 app (`npm run e2e:r6`), hidden (off-screen, never shown or
+focusable) and `--mute`; speaker level measured 0 on every step (the 440 Hz review tone measured
+pre-gain 0.40, speakers 0). **No sound checks this round.** Unit tests 178/178 (`npm test`, 18 new).
+Rounds 1-5 app checks re-run on the 0.6.0 exe: all pass (all silent). Our test songs (Ode to Joy + Rock band:
+steady 100 bpm, tempo change to 132, 4 bars of 3/4; Ode + Jazz band, swung) are rendered to audio
+so every note is known. Screenshots `test-results/r6-*.png`; report `report-round6.json`.
+Everything is in the **🎧 Recording** dock tab (toolbar): the wizard, the tools, sheet music.
+1. ML runtime: **done. Choice: ONNX Runtime from Node** (`onnxruntime-node` 1.31.1, MIT) in a
+   background utility process at Below Normal; **DirectML on the GPU** (GTX 1660 Ti), CPU fallback;
+   no Python. All three models have ONNX versions. Check: basic-pitch test model, one 2 s window:
+   GPU 9.0 ms, CPU 28.2 ms. Beat This! runs on the CPU on purpose (DirectML was ~3x slower for it).
+2. Beats and tempo: **done.** Beat This! (MIT) -> bars + tempo map (one tempo point only where the
+   beats drift > 12 ms), time signature from the downbeats (Beats/bar to redo it); in the review view:
+   drag a beat line, double-click = beat 1, Tap tempo over selected bars, Re-bar; audio clips never
+   move. Check (detected beats vs truth): steady 61/64 within 20 ms (mean 14.4 ms), tempo change 59/64
+   (15.6 ms; map 100 -> 132 found), 3/4 section 58/60 (13.6 ms); all 64/64, 64/64, 60/60 once a
+   constant +14 ms is removed (our synth's own attack is 5-8 ms of it). 3/4 bars: found 2+3+3+4 for
+   3+3+3+3 (fix with Re-bar / set downbeat). Hüsker Dü vs its chart's beat markers: chart sits a
+   constant 75 ms off the detected beats; 349/385 within 20 ms after that offset (mean |err| 75 ms raw).
+3. Stems: **done.** HT-Demucs 6 stems (drums, bass, other, vocals, guitar, piano), each a muted audio
+   track. Check (38.4 s Rock mix): 20.4 s on the GPU; share of each stem that is the right
+   instrument: drums 99.2 %, bass 99.4 %, guitar 98.7 %; vocals/piano/other < 0.2 % of the mix energy.
+4. Audio to notes: **done.** basic-pitch (Apache-2.0) -> new track, grid 1/4..1/32 (incl. triplets)
+   or "loose" (1/64), range per instrument, string/fret positions (126/126 playable), chord symbols
+   from the existing detection. Fixes: onsets were 30-40 ms late (now -25 ms), sustained notes split
+   (weak re-attacks merged), bass octave harmonics dropped. Check, F-score (50 ms, pitch exact):
+   **bass 0.972** (target 0.9; loose timing 0.908; from the bass stem 0.856), lead guitar 0.968,
+   rhythm-guitar chords 0.911, guitar stem (both guitars mixed) **0.33** (weak). Hüsker Dü bass stem
+   vs chart: 0.165 raw, 0.356 after removing the chart offset, 0.50 ignoring octave.
+5. Drums: **done, without a model** (no usable free drum-transcription model in ONNX): onset
+   detection + band-energy rules (kick/snare/hi-hat open/closed/toms low-mid-high/crash/ride).
+   Check, F per piece, clean part / drum stem: Rock kick 0.97, snare 0.99, closed hat 0.95,
+   open hat 1.00, crash 0.80 (2 of 3); Jazz kick 0.95, snare 0.96, hat 0.98 (stem 0.72), toms 0.89-1.00, ride 0.42 (stem 0)
+   (rides played with the kick are missed). Rock clean part and drum stem scored the same. Swung parts
+   need "loose" timing (a straight 1/16 grid moves swung off-beats ~70 ms). Target 0.85+ kick/snare: met.
+6. Review view: **done.** One-row score with the recording/stem above it as waveform or spectrogram
+   (log frequency), drawn bar by bar so they line up; A/B: original / stem / transcription / stem +
+   transcription (no change to the song); speed 25-100 % with pitch kept; loop; a note click plays
+   2.5 s from there against the audio; editing works as usual. Check: 440 Hz tone measured
+   440.02 Hz at 100 % and 440.02 Hz at 50 % (`r6-6-review-*.png`).
+7. "Song to Rocksmith" wizard: **done.** Load -> beats -> stems -> bass/guitar notes -> review ->
+   Export (each step redo/skip); the ORIGINAL recording is the song audio. Check (Rock mix, 45 s
+   end to end): .psarc built (18 difficulty levels, 0 issues), re-opened: chart notes vs notes before
+   export, lined up through the audio by cross-correlation: max error 1 ms (target 20 ms); vs the true
+   notes F 0.856. Hüsker Dü: whole wizard in 1.9 min, .psarc built (25 levels); outputs deleted.
+8. Sheet music: **done.** Audiveris 5.11.0 (AGPL, separate program) downloaded once (85 MB) and
+   unpacked into the app's data folder, no install; PDF/PNG/JPG -> MusicXML -> song; unsure bars
+   (Audiveris warnings + bars whose rhythm does not add up) listed and clickable. Check: our Ode to
+   Joy PDF read back: 101/108 notes (93.5 %), 15/16 bars; bar 4 flagged. Tempo text is not read (no
+   OCR languages), so read songs start at 120 bpm. Plus save/load (format v6) and undo: stems + transcription + recording survive save/reopen (8 tracks, 17 bars, 3 tempo points, all clip files present); undo takes back notes, stems, beats one step each, redo works.
+   Found + fixed on the way: PDF-only export failed (page image written before its folder existed);
+   a song of only audio tracks lost its tempo map in alphaTab (crash on pause).
+
+### For Dan to check
 - Play an exported song in Rocksmith 2014 (timing, note placement, difficulty levels). Still
-  pending from Round 3.
-- Run `dist\musicGenie-0.5.0-portable.exe`. Open Ode to Joy, Band > Generate (Rock), Play: should
-  sound like before. **🎚 Mixer**: move faders/pan, mute/solo, watch the meters; pick a Preset on
-  each strip (Crunch on rhythm, Lead on lead, Bass drive, Drum room); raise Rev/Dly sends.
-- Click an effect name to open its knobs; ⏻ bypass, ▲▼ reorder, ✕ remove; "+ Effect…" adds one.
-- 〰 Automation: "+ Lane…" Volume, click points to make a fade; play it.
-- 🎙 Audio: + Audio track, Import audio… (any WAV/MP3). Drag clips, drag edges to trim, fades in the
-  clip box. **Recording (real input, not tested here):** pick your interface or the Real Tone Cable,
-  connect output to input with a cable and press Test latency, then ● Record (count-in + metronome).
-- ⌨ Keyboard piano (toolbar): A S D F… play notes through the selected track; 🎛 MIDI tab ▸ Record.
-- ⇩ Export…: writes WAV, MP3, MIDI, MusicXML, .gp, PDF (and stems) to Documents\musicGenie\Exports.
-  Open the PDF and the .gp in Guitar Pro / the .musicxml in MuseScore if you have them.
-- Known limits: drum tracks share one mixer strip if there are several (MIDI channel 10); over 15
-  melodic tracks share channels; clips are not time-stretched at other tempos/speeds; MIDI import
-  of 32nd/triplet-heavy songs quantises to 16ths (the exported file itself has every note); MP3
-  encoder is LGPL (lamejs, separate chunk).
+  pending from Round 3 — now also a "Song to Rocksmith" export of a real recording.
+- Run `dist\musicGenie-0.6.0-portable.exe`. **🎧 Recording** (toolbar) > Song to Rocksmith > Load…
+  any song WAV/MP3: Run beats (first use downloads 83 MB), Run stems (110 MB; ~1 min per 4 min of
+  song on the GPU), tick bass, Run notes, Open review, Export…. Every download asks first; the bar
+  under the toolbar shows progress and has Cancel; the app stays usable meanwhile.
+- Review view: Original / Stem / Transcription / Stem + transcription; Speed 50 % should sound slower
+  but not lower; drag a beat line, double-click one to make it beat 1; select bars, play, click Tap on
+  each beat (4+), Apply taps.
+- Tools: Audio to notes on any audio track (choose instrument + grid, or loose); Drums -> drum track
+  on the drum stem; Read sheet music… on a PDF or photo (first use downloads Audiveris, 85 MB).
+- Known limits: guitar transcription from a full-band guitar stem is weak (F 0.33 here); drums are
+  rule-based (tuned on the GM kit; real kits will be rougher, rides under kicks are missed); OMR does
+  not read tempo/lyrics text; the Demucs weights are non-commercial (CC BY-NC 4.0): fine for personal
+  use, not for selling the app.
+- Still open from earlier rounds: try the Round 2-5 features (band, tab editing + tunings, piano
+  roll / drum grid / chords / MIDI, mixer / effects / automation / audio tracks / export; each round
+  above says how); Round 5 recording with a real input, Round 4 with a real MIDI keyboard.
 
-## Current Objective: Round 6, "recording to tabs"
-Goal: take a real song recording, find its beats, split it into
-instruments, turn the bass/guitar/drums into editable tracks, fix them up
-against the audio, and (for guitar/bass) export a Rocksmith chart that plays
-along with the original recording. Plus reading sheet music from a PDF.
-Standing checks for Dan (keep in "For Dan to check" until he reports): play
-an exported song in Rocksmith 2014; try Rounds 2-5 features.
-
-Design rules for this round:
-- Plug in existing open-source tools/models; don't train or write our own
-  ML. Note each tool's and model's licence in `CLAUDE.md`.
-- Heavy jobs run in the background at Below Normal priority with progress
-  and Cancel; the app stays usable. Models download on first use (with
-  size shown and a progress bar) into the app's data folder, not the repo.
-- Results are ordinary tracks/clips: editable and undoable like anything
-  else; the original recording is never changed.
-- Test material: render our own songs to audio (the notes are known, so
-  accuracy can be measured), plus the private Hüsker Dü file (real audio +
-  a human-made bass chart) as a real-world benchmark. Never commit the
-  private file or anything derived from it.
-
-1. **ML runtime (do first, report the choice).** Pick how models run on
-   Dan's PC: ONNX Runtime from Node (preferred if the models below have
-   ONNX versions) or a bundled Python environment. Use the GPU when present
-   (DirectML/CUDA), otherwise the CPU. Check: a test model runs; report
-   CPU/GPU used and the time.
-2. **Beats and tempo from audio.** Detect beats and downbeats in a recording
-   and build the tempo map and bars from them (time signature guessed,
-   changeable). Editable beat markers: drag a beat, set the downbeat, tap
-   tempo over a section; audio clips never move. Check: our rendered songs
-   (steady, a tempo change, a 3/4 section): beats within 20 ms; Hüsker Dü:
-   compare with its chart's beat markers and report the average error.
-3. **Stem separation.** Split a recording into vocals, drums, bass and other
-   (and guitar/piano if a 6-stem model is available, e.g. Demucs htdemucs_6s),
-   each as an audio track. Check: run on a rendered band mix; report the
-   time taken and how much of each stem's energy is the right instrument.
-4. **Audio to notes.** Transcribe a stem or any clip (e.g. Spotify's
-   basic-pitch) into a new track, quantised to the tempo map (choose grid,
-   with a "keep loose timing" option), kept within the chosen instrument's
-   range; guitar/bass get playable string/fret positions; chord symbols from
-   the existing chord detection. Check: rendered bass and guitar parts: note
-   F-score with 50 ms onset tolerance, target 0.9 or better on bass; Hüsker
-   Dü bass stem vs its chart: report the F-score (no target, benchmark).
-5. **Drums to a drum track.** Transcribe the drum stem into kick, snare,
-   hi-hat (open/closed), toms, crash and ride (an existing drum-transcription
-   model if a usable free one exists; otherwise onset detection plus
-   classification for at least kick/snare/hi-hat). Check: rendered Rock and
-   Jazz drums: F-score per kit piece reported, target 0.85+ on kick/snare.
-6. **Review and fix view.** Waveform (and spectrogram toggle) lined up above
-   the score/tab; A/B buttons: original / stem / transcription / stem +
-   transcription; slow the audio down to 25-100% **with pitch kept**, loop a
-   range; click a note to hear it against the audio. Normal editing works
-   here. Check: screenshot; pitch stays the same at 50% speed (measured).
-7. **"Song to Rocksmith" wizard.** One guided flow: load a recording -> beats
-   -> stems -> transcribe bass and/or guitar -> review -> Rocksmith export
-   using the ORIGINAL recording as the song audio (charts lined up to it).
-   Every step can be redone or skipped. Check: run on a rendered song end to
-   end; the exported .psarc round-trips with its notes lined up to the audio
-   within 20 ms; run on the Hüsker Dü file and report (don't keep outputs).
-8. **Sheet music from PDF or photo.** Use Audiveris (installed locally by
-   the app or by you, note how in `CLAUDE.md`) to turn a PDF/image score into
-   MusicXML, then import it; show which pages/measures it was unsure about.
-   Check: export a PDF from our app (Round 5), read it back, compare note
-   counts and report the match. Plus save/load, undo and the Round 1-5 app
-   checks on the new exe.
-
-### For Dan to check (fill in at end of round)
-- Play an exported song in Rocksmith 2014 (timing, note placement,
-  difficulty levels). Still pending from Round 3.
+## Current Objective
+None: Round 6 is done. Waiting for Dan's go for Round 7.
 
 ## Next Steps (Do Not Start Yet)
 - **Later, unordered:** test item 7 of Round 4 with a real MIDI keyboard and Round 5

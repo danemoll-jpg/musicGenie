@@ -66,6 +66,9 @@ export class ScorePlayer {
   private renderWaiters: (() => void)[] = [];
   /** Edit mode: a click selects the beat instead of playing from it. */
   editMode = false;
+  /** Review view: a click plays only this long (ms of real time), then pauses. */
+  clickPlayMs: number | null = null;
+  private clickTimer: ReturnType<typeof setTimeout> | null = null;
   onBeatClick: ((hit: BeatHit) => void) | null = null;
   private lastDown = { x: 0, y: 0 };
   private pendingScore: alphaTab.model.Score | null = null;
@@ -165,6 +168,10 @@ export class ScorePlayer {
       if (b && downBeat && b === downBeat && this.status.ready) {
         a.tickPosition = b.absolutePlaybackStart;
         if (!this.status.playing) a.play();
+        if (this.clickPlayMs) {
+          if (this.clickTimer) clearTimeout(this.clickTimer);
+          this.clickTimer = setTimeout(() => { this.clickTimer = null; a.pause(); }, this.clickPlayMs);
+        }
       }
       downBeat = null;
     });
@@ -230,8 +237,11 @@ export class ScorePlayer {
     const song = this.lastSong;
     const idx = new Set(song?.tracks.map((t, i) => (t.audio ? i : -1)).filter((i) => i >= 0) ?? []);
     if (!idx.size) return;
-    const f = file as { tracks: { events: { track: number }[] }[] };
-    for (const t of f.tracks) t.events = t.events.filter((e) => !idx.has(e.track));
+    const f = file as { tracks: { events: { track: number; type?: number }[] }[] };
+    // Keep the song-wide meta events (tempo 0x51, time signature 0x58, end of track 0x2F) even
+    // when they sit on an audio track: a song of only audio tracks still needs its tempo map.
+    const meta = new Set([0x51, 0x58, 0x2f]);
+    for (const t of f.tracks) t.events = t.events.filter((e) => !idx.has(e.track) || meta.has(e.type ?? -1));
   }
 
   /** Playback ticks where a model bar starts (one per pass through repeats). */
@@ -279,6 +289,18 @@ export class ScorePlayer {
         resolve();
       });
     });
+  }
+
+  /** One long row of bars (review view: lines up with the waveform) or pages. */
+  setHorizontal(on: boolean) {
+    const mode = on ? alphaTab.LayoutMode.Horizontal : alphaTab.LayoutMode.Page;
+    if (this.api.settings.display.layoutMode === mode) return;
+    this.api.settings.display.layoutMode = mode;
+    this.api.updateSettings();
+    if (this.api.score) {
+      this.pendingScore = this.api.score;
+      this.api.render();
+    }
   }
 
   playPause() {

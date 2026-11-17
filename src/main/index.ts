@@ -11,6 +11,8 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, 
 import { basename, dirname, join, normalize } from 'node:path';
 import { unzipStore, zipStore } from './zip';
 import { RocksmithHelper } from './rocksmithHelper';
+import { MlHost, downloadModel, modelPath, modelStatus, modelsDir } from './ml';
+import { omrCancel, omrInstall, omrRun, omrStatus } from './omr';
 import { pathToFileURL } from 'node:url';
 
 function flagValue(name: string): string | undefined {
@@ -309,6 +311,7 @@ ipcMain.handle('print-pdf', async (_e, args: { out: string; job: { pageSize: 'Le
     let png: string | null = null;
     if (args.pngOut) {
       const img = await pw.webContents.capturePage();
+      mkdirSync(dirname(args.pngOut), { recursive: true });
       writeFileSync(args.pngOut, img.toPNG());
       png = args.pngOut;
     }
@@ -337,6 +340,38 @@ ipcMain.handle('capture', async () => {
   return img.toPNG();
 });
 
+// ---------- Round 6: models + analysis worker ----------
+const ml = new MlHost((ch, msg) => win?.webContents.send(ch, msg));
+ipcMain.handle('ml-models', () => modelStatus());
+ipcMain.handle('ml-download', (_e, id: string) => downloadModel(id, (ch, msg) => win?.webContents.send(ch, msg)));
+ipcMain.handle('ml-model-path', (_e, id: string, file: string) => modelPath(id, file));
+ipcMain.handle('ml-run', (_e, cmd: string, args: unknown) => ml.run(cmd, args));
+ipcMain.handle('ml-cancel', () => { ml.cancel(); omrCancel(); });
+ipcMain.handle('omr-status', () => omrStatus());
+ipcMain.handle('omr-install', () => omrInstall((ch, msg) => win?.webContents.send(ch, msg)));
+ipcMain.handle('omr', (_e, args: { input: string; outDir: string }) => omrRun(args, (ch, msg) => win?.webContents.send(ch, msg)));
+ipcMain.handle('ml-info', async () => {
+  let gpu: unknown = null;
+  try {
+    gpu = await app.getGPUInfo('basic');
+  } catch {
+    /* ignore */
+  }
+  const devices = (gpu as { gpuDevice?: { vendorId: number; deviceId: number; active: boolean; driverVersion?: string }[] } | null)?.gpuDevice ?? [];
+  return { modelsDir: modelsDir(), pid: ml.lastPid, devices };
+});
+/** Delete files or folders (temporary analysis audio). Only inside userData. */
+ipcMain.handle('remove-paths', (_e, paths: string[]) => {
+  const root = normalize(app.getPath('userData')).toLowerCase();
+  let n = 0;
+  for (const p of paths) {
+    if (!normalize(p).toLowerCase().startsWith(root)) continue;
+    rmSync(p, { recursive: true, force: true });
+    n++;
+  }
+  return n;
+});
+
 // ---------- app ----------
 app.whenReady().then(() => {
   protocol.handle('app', (req) => {
@@ -356,6 +391,8 @@ app.on('window-all-closed', () => {
 });
 app.on('before-quit', () => {
   rocksmith.stop();
+  ml.stop();
+  omrCancel();
   cleanExit();
 });
 

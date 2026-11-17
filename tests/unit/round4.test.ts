@@ -511,7 +511,7 @@ describe('8. save/load and undo', () => {
     s = addHarmonyTrack(s, s.tracks[2].id, 'sixth', 'below');
     const back = parseProject(serializeProject(s));
     expect(back).toEqual(s);
-    expect(JSON.parse(serializeProject(s)).schemaVersion).toBe(5);
+    expect(JSON.parse(serializeProject(s)).schemaVersion).toBeGreaterThanOrEqual(5);
   });
 
   it('each action is one undo step', () => {
