@@ -11,6 +11,7 @@ import { loadMedia } from './audio/clips';
 import { engine } from './audio/engine';
 import { analysisCtl, useAnalysis } from './Round6';
 import type { AppState, Store } from './store';
+import { HelpButton, MoreOptions } from './HelpUi';
 
 export const ENGINE = 'diffsinger:qixuan';
 export const DEFAULT_VOICE: VoiceSettings = { vibratoCents: 35, vibratoHz: 5.5, dynamics: 0.5, breath: 0.4, gender: 0, steps: 20 };
@@ -131,28 +132,32 @@ export function VoicePanel({ state, store, track }: { state: AppState; store: St
   };
   return (
     <section className="voice-panel" data-testid="voice-panel">
-      <h4>Singing <span className="sub">DiffSinger · Qixuan voicebank (credit "Qixuan (绮萱) / DiffSinger", mark songs as AI-made)</span></h4>
+      <h4><HelpButton topic="singing" label="panel" /> Singing <span className="sub">DiffSinger · Qixuan voicebank (credit "Qixuan (绮萱) / DiffSinger", mark songs as AI-made)</span></h4>
       <div className="vrow">
-        {verses > 1 && <label>Verse <select value={verse} onChange={(e) => setVerse(Number(e.target.value))}>{Array.from({ length: verses }, (_, i) => <option key={i} value={i}>{i + 1}</option>)}</select></label>}
-        <Slider label="Vibrato" value={set.vibratoCents} min={0} max={100} step={5} onChange={(v) => up({ vibratoCents: v })} fmt={(v) => v + ' c'} title="Vibrato depth on long notes (cents)" />
-        <Slider label="Rate" value={set.vibratoHz} min={3.5} max={7.5} step={0.25} onChange={(v) => up({ vibratoHz: v })} fmt={(v) => v.toFixed(2) + ' Hz'} />
-        <Slider label="Dynamics" value={set.dynamics} min={0} max={1} step={0.05} onChange={(v) => up({ dynamics: v })} fmt={(v) => Math.round(v * 100) + '%'} title="How much the note velocities change the loudness" />
-        <Slider label="Breath" value={set.breath} min={0} max={1} step={0.05} onChange={(v) => up({ breath: v })} fmt={(v) => Math.round(v * 100) + '%'} title="Breaths before phrases and a breathier tone" />
+        {verses > 1 && <label title="Which verse of the lyrics to sing">Verse <select value={verse} onChange={(e) => setVerse(Number(e.target.value))}>{Array.from({ length: verses }, (_, i) => <option key={i} value={i}>{i + 1}</option>)}</select></label>}
+        <Slider label="Vibrato" value={set.vibratoCents} min={0} max={100} step={5} onChange={(v) => up({ vibratoCents: v })} fmt={(v) => v + ' c'} title="Vibrato: how much the voice wobbles in pitch on long notes (depth in cents); 0 = straight" />
         <Slider label="Voice" value={set.gender} min={-0.6} max={0.6} step={0.05} onChange={(v) => up({ gender: v })} fmt={(v) => (v > 0 ? '+' : '') + v.toFixed(2)} title="Voice character: lower = deeper, higher = brighter" />
-        <label title="More steps = cleaner, slower">Quality <select value={set.steps} onChange={(e) => up({ steps: Number(e.target.value) })}>
-          <option value={10}>draft</option><option value={20}>normal</option><option value={40}>best</option></select></label>
+        <MoreOptions title="Fine-tune the singing voice and its quality">
+          <Slider label="Vibrato speed" value={set.vibratoHz} min={3.5} max={7.5} step={0.25} onChange={(v) => up({ vibratoHz: v })} fmt={(v) => v.toFixed(2) + ' Hz'} title="Vibrato speed (rate in Hz): how fast the voice wobbles" />
+          <Slider label="Dynamics" value={set.dynamics} min={0} max={1} step={0.05} onChange={(v) => up({ dynamics: v })} fmt={(v) => Math.round(v * 100) + '%'} title="Dynamics: how much louder accented (harder-played) notes are sung" />
+          <Slider label="Breath" value={set.breath} min={0} max={1} step={0.05} onChange={(v) => up({ breath: v })} fmt={(v) => Math.round(v * 100) + '%'} title="Breaths before phrases and a breathier tone" />
+          <label title="Quality (render steps): best = cleaner voice but slower to make; draft = quick to try things out">Quality <select value={set.steps} onChange={(e) => up({ steps: Number(e.target.value) })}>
+            <option value={10}>draft</option><option value={20}>normal</option><option value={40}>best</option></select></label>
+        </MoreOptions>
       </div>
       <div className="vrow">
-        <button className="primary" disabled={!lyr || !!a.job} onClick={() => void sing()} data-testid="sing">{vt ? 'Sing again' : 'Sing'}</button>
+        <button className="primary" disabled={!lyr || !!a.job} onClick={() => void sing()} data-testid="sing" title="Make a computer voice sing this melody with its lyrics; the result is a new audio track (takes a little while; the voice downloads the first time)">{vt ? 'Sing again' : 'Sing'}</button>
         {vt && <span className={stale ? 'warn' : 'ok'} data-testid="sing-status">{stale ? 'out of date: notes, lyrics or settings changed' : 'up to date'}</span>}
         {vt && <label className="check" title="Sing again by itself a few seconds after notes or lyrics change">
           <input type="checkbox" checked={!!vt.voice?.auto} onChange={(e) => store.updateTrack(vt.id, (t) => ({ ...t, voice: { ...t.voice!, auto: e.target.checked } }), 'Auto re-sing')} /> re-sing after edits</label>}
         {!lyr && <span className="sub">Add lyrics above first.</span>}
         {last && <span className="sub" data-testid="sing-last">{last.durationS.toFixed(1)} s sung in {last.seconds} s ({last.provider === 'dml' ? 'GPU' : 'CPU'}, {last.phrases} phrases)</span>}
         <span className="spacer" />
-        <button disabled={!lyr} onClick={() => void save('ustx')} title="OpenUtau project with this melody and lyrics">Export .ustx…</button>
-        <button disabled={!lyr} onClick={() => void save('svp')} title="Synthesizer V project with this melody and lyrics">Export .svp…</button>
-        <button onClick={() => void importRenderedVocal(store, track.id).catch((e) => store.showError((e as Error).message))} title="A WAV rendered from the exported file, placed at bar 1">Import rendered vocal…</button>
+        <MoreOptions label="Use another singing program" title="Sing it in OpenUtau or Synthesizer V instead, then bring the result back">
+          <button disabled={!lyr} onClick={() => void save('ustx')} title="Save the melody and lyrics as an OpenUtau project (.ustx), to sing it with OpenUtau">Export .ustx…</button>
+          <button disabled={!lyr} onClick={() => void save('svp')} title="Save the melody and lyrics as a Synthesizer V project (.svp), to sing it with Synthesizer V">Export .svp…</button>
+          <button onClick={() => void importRenderedVocal(store, track.id).catch((e) => store.showError((e as Error).message))} title="Bring back a vocal you made in another program (a WAV rendered from bar 1); it goes on a new audio track">Import rendered vocal…</button>
+        </MoreOptions>
       </div>
     </section>
   );

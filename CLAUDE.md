@@ -124,6 +124,13 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
   place from `E:\Rocksmith2014\dlc` (read-only) + every .psarc in `TestData/private/`; `--songs=N`
   limits the official list; their audio, stems and transcriptions are deleted after each song
   (~2.5 min per song). Shares the Round 6 model profile `%TEMP%\musicgenie-r6-models`.
+- Round 8 app checks: `npm run e2e:r8` (packaged) / `npm run e2e:r8:dev`; report
+  `test-results/report-round8.json`. No sound checks. Measures the score area at 1280x720 and
+  1920x1080 (window resized with `setContentSize`, still hidden), drives every tour with clicks, audits
+  every control for a tooltip. Item 5 also launches a fresh profile with `--tour` (first-run tour).
+- Help pages -> user guide: `node scripts/make-user-guide.mjs` (rewrites `Docs/USER-GUIDE.md` from
+  `src/renderer/src/help/*.ts`; run it after changing any help page). Example songs:
+  `node scripts/make-examples.mjs` (-> `src/renderer/public/examples/`, all public domain / CC0).
 - Round 4 app checks: `npm run e2e:r4` (packaged) / `npm run e2e:r4:dev`; report
   `test-results/report-round4.json`. No sound checks (nothing unmutes). Item 7 drives the
   MIDI recorder with a simulated input (`mgTest.midiSimulate`); no keyboard needed.
@@ -131,7 +138,31 @@ Run heavy jobs at Below Normal, e.g. `cmd /c "start /belownormal /b /wait npm ru
 ## Standing facts
 - App flags: `--mute` (master gain 0 before any audio), `--hidden` (off-screen
   rendering, never shown or focusable, exposes `window.mgTest`),
-  `--profile-dir=DIR`, `--autosave-ms=N` (default 120000), `--open=FILE`.
+  `--profile-dir=DIR`, `--autosave-ms=N` (default 120000), `--open=FILE`,
+  `--tour` (start the first-run tour even when hidden; it never starts in a hidden window otherwise).
+- **UI layout (Round 8) — where things go.** `App.tsx` = shell: top bar (`Shell.tsx`: `MenuBar` File/Edit/
+  View/Song/Tools/Help, `WorkspaceTabs`, `WorkspaceTools`), `PlayBar`, then tracks panel (left) | score |
+  band panel (right, Arrange only), bottom panel `Workspace.tsx` `Dock`. Workspaces (`store.WORKSPACES`):
+  **Arrange** (no bottom tabs; band panel), **Write** (roll, drums, chords, prog, lyrics, midi + note editing),
+  **Mix** (mixer, auto, audio, sounds), **Recordings** (rec). `store.openDock(tab)` switches to the tab's
+  workspace; `dock = null` = folded. A new feature goes into the workspace it serves (a bottom tab, the
+  workspace tools strip, or a menu item) — never a new always-visible toolbar button. Rocksmith stays
+  under File > Export (bonus). Panel sizes/folds, zoom ('fit' or a scale) and page/scroll view are
+  `state.layout`, saved in localStorage `mg.layout.v1`; the score keeps >= 60 % of the window at 1280x720.
+  The window opens maximized the first time, then at its last size (`settings.json` `window`; not in tests).
+  Electron's own menu keeps only edit roles + reload/dev tools (F11 and Ctrl +/-/0 belong to the app).
+- **Tooltip + help rule (Round 8):** every new button/select/input/textarea/summary needs a `title`
+  (or sits in a `<label title>`) that says what it does AND when you'd use it, in plain words; every new
+  panel or dialog needs a `<HelpButton topic=…>` (`HelpUi.tsx`) and a page in `src/renderer/src/help/*.ts`
+  (what, when, exactly 3 steps); then regenerate `Docs/USER-GUIDE.md`. Expert settings go in
+  `<MoreOptions>` (a `<details>`: children stay in the DOM for tests). Jargon stays in the tooltip, the
+  label uses plain words (e.g. "Split into instruments", "Turn audio into notes", "Changes over time").
+  `npm run e2e:r8` item 6 fails on any control without a tooltip.
+- Home screen (`Shell.tsx` `Home`): shown with no song or via File > Home (`state.home`); example songs in
+  `public/examples/` open under their own title (`openExample`); recent files = `settings.json` `recent`
+  (8, added on open/save). Tours (`tours.ts`): steps point at real controls by selector; a step with
+  `done` moves on only when the user does it (not if it was already true when shown). First-run tour
+  once (`settings.json` `tourDone`). `mgTest.clickGenerate` unfolds the band panel for its click.
 - Master bus (`src/renderer/src/audio/masterBus.ts`) patches
   `AudioNode.connect` so everything bound for the speakers goes pre-analyser ->
   gain -> post-analyser. `post` peak is the proof of silence; `pre` peak proves
@@ -348,10 +379,11 @@ Short results: about 20 lines per round, one line per item plus its check.
 **Always check `TODO.md` for the current objective before starting work.**
 Rounds 1-7 built the features (import, score/tabs, band, editing, Rocksmith,
 composition tools, mixer/effects/export, recording to notes, lyrics/singing,
-describe a song). Dan found the UI confusing, the score too small, and the
-app too Rocksmith-centred. Current round: Round 8, a layout/wording/help
-round with no new features (score-first layout, four workspaces, plain
-words, home screen, guided tours, help everywhere).
+describe a song). Round 8 (done, 0.8.0) reorganised the UI without new features:
+score-first layout, menu bar + play bar + four workspaces, plain words, Home
+screen with examples, guided tours, a tooltip on every control and a help page
+per panel (`Docs/USER-GUIDE.md`). Rocksmith is a bonus export (File > Export).
+Next planned: Round 9, VST3 instruments and effects (see `TODO.md`).
 Layout: `src/model` (pure model + edits + undo + .mgproj, chords, split,
 sections, band engine, noteEdit, tunings, tempo, rocksmith, pianoRoll, chordTheory,
 progressions, drums, songChanges, chart, harmony, recording, mix, loudness, audioClips,
@@ -359,7 +391,8 @@ beatMap, transcribe, lyrics, sounds, describe), `src/ml` (pure analysis host cod
 voice, whisper, refine), `src/export` (MIDI, MusicXML,
 Guitar Pro writers), `src/import` (alphaTab + MIDI importers), `src/render/toAlphaTab.ts`,
 `src/main` (Electron, settings.json, Rocksmith helper process, ml worker + models, Audiveris),
-`src/preload`, `src/renderer` (React UI, Band panel, dialogs, Round3.tsx edit bar/tuning/export
+`src/preload`, `src/renderer` (Round 8 shell: App.tsx, Shell.tsx menus/play bar/home/help/tour overlay,
+Workspace.tsx bottom panel, HelpUi.tsx, tours.ts, help/*.ts pages; React UI, Band panel, dialogs, Round3.tsx edit bar/tuning/export
 dialog, editor keys, player, store, test API; `audio/` engine, graph, fx, worklet, offline, clips,
 recorder; Mixer/Automation/AudioTracks/Round5 export dialog, PrintView; Round6.tsx recording
 panel + wizard, analysis.ts, Review.tsx, omr.ts; Round7.tsx lyrics tab, sound library, Describe

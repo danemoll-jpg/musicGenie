@@ -5,6 +5,8 @@ export interface Flags {
   hidden: boolean;
   autosaveMs: number;
   open: string | null;
+  /** Round 8: start the first-run tour even in a hidden test window. */
+  tour: boolean;
 }
 
 export interface AppSettings {
@@ -20,6 +22,10 @@ export interface AppSettings {
   latencyMs?: number;
   /** Round 7: the sound library (SoundFonts and SFZ instruments the user added). */
   soundLibrary?: { file: string; name: string; kind: 'sf2' | 'sfz' }[];
+  /** Round 8: recent files, first-run tour finished, window size/position. */
+  recent?: string[];
+  tourDone?: boolean;
+  window?: { x: number; y: number; width: number; height: number; maximized: boolean };
 }
 
 // Read synchronously so the renderer knows about --mute before any audio code runs.

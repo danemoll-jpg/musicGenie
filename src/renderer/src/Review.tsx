@@ -13,6 +13,7 @@ import { engine } from './audio/engine';
 import { loadMedia } from './audio/clips';
 import type { ScorePlayer, PlayerStatus } from './player';
 import type { AppState, Store } from './store';
+import { HelpButton } from './HelpUi';
 
 export type ReviewSource = 'original' | 'stem' | 'tx' | 'stemtx';
 export interface ReviewState {
@@ -73,6 +74,13 @@ function barBoxes(player: ScorePlayer, song: Song): BarBox[] {
 }
 
 const H = 110;
+
+const AB_TIPS: Record<ReviewSource, string> = {
+  original: 'Hear the original recording, to remind yourself how it should sound',
+  stem: 'Hear only the chosen instrument from the recording (stem), to pick out its notes',
+  tx: 'Hear only the written notes (transcription), to check they sound right on their own',
+  stemtx: 'Hear the instrument and the written notes together: wrong notes stand out',
+};
 
 export function ReviewView({ state, store, player, status }: { state: AppState; store: Store; player: ScorePlayer | null; status: PlayerStatus | null }) {
   const r = useReview();
@@ -248,45 +256,47 @@ export function ReviewView({ state, store, player, status }: { state: AppState; 
   return (
     <div className="review" data-testid="review">
       <div className="review-bar">
-        <b>Review</b>
-        <span className="seg" role="group" title="What you hear">
-          {([['original', 'Original'], ['stem', 'Stem'], ['tx', 'Transcription'], ['stemtx', 'Stem + transcription']] as [ReviewSource, string][]).map(([k, l]) => (
-            <button key={k} className={r.source === k ? 'chip' : ''} data-testid={'ab-' + k} onClick={() => reviewCtl.set({ source: k })}>{l}</button>
+        <b title="Review view: the recording drawn above the music, bar by bar, to check and fix notes and beats">Compare with the recording</b> <HelpButton topic="compare-with-recording" label="view" />
+        <span className="seg" role="group" title="What you hear while playing: switch between them to find notes that don't match">
+          {([['original', 'Original'], ['stem', 'One instrument'], ['tx', 'Notes'], ['stemtx', 'Instrument + notes']] as [ReviewSource, string][]).map(([k, l]) => (
+            <button key={k} className={r.source === k ? 'chip' : ''} data-testid={'ab-' + k} onClick={() => reviewCtl.set({ source: k })}
+              title={AB_TIPS[k]}>{l}</button>
           ))}
         </span>
-        <label>Stem
+        <label title="Which split-off instrument (stem) to show and hear, e.g. the bass to check the bass notes">Instrument
           <select value={r.stemId ?? ''} onChange={(e) => reviewCtl.set({ stemId: e.target.value || null })}>
             <option value="">—</option>
             {stems.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
-        <label>Transcription
+        <label title="Which note track (transcription) to hear against the recording, e.g. the one you are fixing">Notes
           <select value={r.txId ?? ''} onChange={(e) => reviewCtl.set({ txId: e.target.value || null })}>
             <option value="">—</option>
             {txs.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
-        <label className={`toggle ${r.spectrogram ? 'on' : ''}`}><input type="checkbox" checked={r.spectrogram} onChange={(e) => reviewCtl.set({ spectrogram: e.target.checked })} /> Spectrogram</label>
-        <label className="speed" title="Slow down (pitch stays the same)">Speed
+        <label className={`toggle ${r.spectrogram ? 'on' : ''}`} title="Show the pitches as a colour picture (spectrogram) instead of the waveform: helps spot which notes are sounding"><input type="checkbox" checked={r.spectrogram} onChange={(e) => reviewCtl.set({ spectrogram: e.target.checked })} /> Spectrogram</label>
+        <label className="speed" title="Slow the recording down to hear fast parts clearly (the pitch stays the same)">Speed
           <input type="range" min={25} max={100} step={5} value={Math.min(100, state.practice.speed)} onChange={(e) => store.setPractice({ speed: Number(e.target.value) })} data-testid="review-speed" />
           <span className="val">{state.practice.speed}%</span>
         </label>
-        <label className={`toggle ${state.practice.loop ? 'on' : ''}`} title="Loop the selected bars (drag over the score)"><input type="checkbox" checked={state.practice.loop} onChange={(e) => store.setPractice({ loop: e.target.checked })} /> Loop</label>
+        <label className={`toggle ${state.practice.loop ? 'on' : ''}`} title="Play the selected bars over and over (drag over the score to select), e.g. to work out a tricky spot"><input type="checkbox" checked={state.practice.loop} onChange={(e) => store.setPractice({ loop: e.target.checked })} /> Loop</label>
         <span className="sep" />
-        <button disabled={!sel || !status?.playing} title="While playing, click on every beat (4+ times) of the selected bars; Apply sets their tempo"
+        <button disabled={!sel || !status?.playing} title="Tap tempo: while playing, click on every beat (4+ times) of the selected bars, then Apply taps, e.g. when the beat lines drift off"
           onClick={() => setTaps([...taps, msAtTick(tempoPoints(song), player!.modelTick(player!.api.tickPosition))])}>Tap ({taps.length})</button>
         <button disabled={!sel || taps.length < 4} onClick={() => {
           try {
             store.edit((s) => tapTempo(s, sel!.startBar, sel!.endBar + 1, taps), 'Tap tempo');
           } catch (e) { store.showError((e as Error).message); }
           setTaps([]);
-        }}>Apply taps</button>
-        <label title="Beats per bar from the first selected bar (to the end of the selection)">Beats/bar
+        }} title="Set the tempo of the selected bars from your taps (needs 4 or more)">Apply taps</button>
+        <label title="Beats per bar to use from the first selected bar (to the end of the selection), e.g. 3 for a waltz bar">Beats/bar
           <input type="number" min={1} max={12} value={perBar} onChange={(e) => setPerBar(Number(e.target.value))} style={{ width: 40 }} />
         </label>
-        <button disabled={!sel} onClick={() => store.edit((s) => rebar(s, sel!.startBar, perBar, sel!.endBar + 1), 'Beats per bar')}>Re-bar</button>
+        <button disabled={!sel} onClick={() => store.edit((s) => rebar(s, sel!.startBar, perBar, sel!.endBar + 1), 'Beats per bar')}
+          title="Rebuild the selected bars with that many beats each, e.g. when the bars start in the wrong place">Re-bar</button>
         <span className="small">Drag a beat line to move it · double-click one to make it beat 1 of a bar</span>
-        <button className="close" onClick={() => reviewCtl.set({ on: false })}>✕</button>
+        <button className="close" onClick={() => reviewCtl.set({ on: false })} title="Close the comparison and go back to the normal score">✕</button>
       </div>
       <div className="review-strip" ref={wrap}>
         <canvas ref={canvas} data-testid="review-canvas"

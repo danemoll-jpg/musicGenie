@@ -10,6 +10,7 @@ import {
 } from '../../model';
 import { liveSynth } from './audio/liveSynth';
 import type { AppState, Store } from './store';
+import { HelpButton, MoreOptions } from './HelpUi';
 
 const KIND_LABEL: Record<string, string> = {
   open: 'Open shapes', barre: 'Barre shapes up the neck', shape: 'Other shapes', power: 'Power chords', triad: 'Triads on string sets',
@@ -31,7 +32,7 @@ export function ChordDiagram({ v, tuning, capo, onClick, selected, testId }: {
   const sy = (f: number) => 22 + (f - top + 0.5) * 18;
   return (
     <svg className={`diagram ${selected ? 'sel' : ''}`} width={W + 30} height={H + 40} onClick={onClick} data-testid={testId}>
-      <title>{v.label}</title>
+      <title>{v.label + ': click to hear it and pick it for Insert'}</title>
       {top === capo + 1 ? <rect x={12} y={18} width={W} height={4} className="nut" /> : <text x={W + 16} y={34} className="fretnum">{top}</text>}
       {Array.from({ length: rows + 1 }, (_, i) => <line key={'f' + i} x1={12} x2={12 + W} y1={22 + i * 18} y2={22 + i * 18} className="fretline" />)}
       {tuning.map((_, s) => <line key={'s' + s} x1={sx(s)} x2={sx(s)} y1={22} y2={22 + H} className="stringline" />)}
@@ -144,26 +145,29 @@ export function ChordExplorer({ state, store, currentBar }: { state: AppState; s
   return (
     <div className="ce" data-testid="chord-explorer">
       <div className="pr-tools">
-        <input className="name" value={text} data-testid="ce-name" title="Type a chord name (e.g. Am7, D/F#, E7#9) and press Enter"
+        <HelpButton topic="chord-explorer" />
+        <input className="name" value={text} data-testid="ce-name" title="Type a chord name (e.g. C, Am, G7, D/F#) and press Enter to see every way to play it"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { const c = parseChordSpec(text); if (c) { setSpec(c); setSelKey(null); } } e.stopPropagation(); }}
           onBlur={() => { const c = parseChordSpec(text); if (c) setSpec(c); }} />
-        <select value={spec.root} onChange={(e) => upd({ root: Number(e.target.value) })} title="Root">
+        <select value={spec.root} onChange={(e) => upd({ root: Number(e.target.value) })} title="Root: the note the chord is named after (the C in C major)">
           {names.map((n, i) => <option key={n} value={i}>{n}</option>)}
         </select>
-        <select value={spec.triad} onChange={(e) => upd({ triad: e.target.value as Triad })} title="Quality">
+        <select value={spec.triad} onChange={(e) => upd({ triad: e.target.value as Triad })} title="Chord type: major sounds bright, minor sounds sad; sus, dim and aug are more colourful">
           {TRIADS.map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
         </select>
-        <select value={spec.ext} onChange={(e) => upd({ ext: e.target.value as Extension })} title="Extension">
+        <select value={spec.ext} onChange={(e) => upd({ ext: e.target.value as Extension })} title="Add a 7th, 9th, … for a richer, jazzier sound (no extension = plain chord)">
           {EXTENSIONS.map((x) => <option key={x.id} value={x.id}>{x.id ? x.label : 'no extension'}</option>)}
         </select>
-        {ALTERATIONS.map((a) => (
-          <label key={a} className="check"><input type="checkbox" checked={spec.alt.includes(a)}
-            onChange={(e) => upd({ alt: e.target.checked ? [...spec.alt, a] : spec.alt.filter((x: Alteration) => x !== a) })} />{a}</label>
-        ))}
-        <select value={spec.bass} onChange={(e) => upd({ bass: Number(e.target.value) })} title="Bass note (slash chord)">
-          {names.map((n, i) => <option key={n} value={i}>{i === spec.root ? 'bass = root' : '/' + n}</option>)}
-        </select>
+        <MoreOptions title="Altered notes (b5, #9, …) and a different bass note (slash chords like D/F#)">
+          {ALTERATIONS.map((a) => (
+            <label key={a} className="check" title={`Alteration ${a}: raise or lower that note of the chord for a tenser, jazzier sound`}><input type="checkbox" checked={spec.alt.includes(a)}
+              onChange={(e) => upd({ alt: e.target.checked ? [...spec.alt, a] : spec.alt.filter((x: Alteration) => x !== a) })} />{a}</label>
+          ))}
+          <select value={spec.bass} onChange={(e) => upd({ bass: Number(e.target.value) })} title="Bass note (slash chord, e.g. C/G = C chord with G in the bass). Use for smooth bass lines">
+            {names.map((n, i) => <option key={n} value={i}>{i === spec.root ? 'bass = root' : '/' + n}</option>)}
+          </select>
+        </MoreOptions>
         <b className="ce-title" data-testid="ce-title">{name}</b>
       </div>
       <div className="pr-tools">
@@ -171,10 +175,10 @@ export function ChordExplorer({ state, store, currentBar }: { state: AppState; s
           {fretted ? `${t.name}: ${tuning.map((p) => pitchName(p).replace(/-?\d+$/, '')).join(' ')}${capo ? `, capo ${capo}` : ''}` : t.instrument.percussion ? 'Drum track: pick a pitched track' : `${t.name} (shapes shown for a guitar in standard tuning)`}
           {' · '}{fv.length} shapes, {pv.length} piano voicings
         </span>
-        <label className="check"><input type="checkbox" checked={setSymbol} onChange={(e) => setSetSymbol(e.target.checked)} /> also set the chord symbol</label>
+        <label className="check" title="Also write the chord name above the score here, so the band and chord charts follow it"><input type="checkbox" checked={setSymbol} onChange={(e) => setSetSymbol(e.target.checked)} /> also set the chord symbol</label>
         <button className="primary" disabled={!selKey || t.instrument.percussion} onClick={insert} data-testid="ce-insert"
-          title="Put the selected voicing on the selected track">Insert at {insertWhere}</button>
-        <button onClick={() => store.tryEdit((s) => setChordSymbol(s, bar, 0, name), 'Chord ' + name)} title="Only set the chord symbol at the start of the bar">Set symbol at bar {bar + 1}</button>
+          title="Write the chord shape you clicked into the selected track at this spot (click a diagram first to choose one)">Insert at {insertWhere}</button>
+        <button onClick={() => store.tryEdit((s) => setChordSymbol(s, bar, 0, name), 'Chord ' + name)} title="Only write the chord name above this bar (no notes). The band plays chords from these names">Set symbol at bar {bar + 1}</button>
       </div>
       <div className="ce-body">
         {[...groups.entries()].map(([label, list]) => (
@@ -192,7 +196,7 @@ export function ChordExplorer({ state, store, currentBar }: { state: AppState; s
           <div className="ce-glabel">Piano voicings</div>
           <div className="ce-row">
             {pv.map((v, i) => (
-              <div key={i} className={`pv ${selKey === 'p' + i ? 'sel' : ''}`} onClick={() => hear(v.pitches, 'p' + i)} data-testid={'ce-p' + i}>
+              <div key={i} className={`pv ${selKey === 'p' + i ? 'sel' : ''}`} onClick={() => hear(v.pitches, 'p' + i)} data-testid={'ce-p' + i} title={`${v.label}: click to hear it and pick it for Insert`}>
                 <PianoKeys pitches={v.pitches} />
                 <div className="sub">{v.label}</div>
                 <div className="notes">{v.pitches.map((p) => pitchName(p)).join(' ')}</div>

@@ -115,6 +115,56 @@ export interface AppState {
   exportOpen: boolean;
   /** Keyboard piano (computer keys play notes) on. */
   kbdPiano: boolean;
+  /** Round 8: the workspace tab (what you're doing). */
+  workspace: Workspace;
+  /** Round 8: the Home screen is shown over the open song (File > Home). Always shown with no song. */
+  home: boolean;
+  /** Round 8: Full score (only the music + a slim play bar). */
+  fullScore: boolean;
+  /** Round 8: panel sizes, zoom, view (remembered in localStorage). */
+  layout: Layout;
+  /** Round 8: recently opened files (userData/settings.json). */
+  recent: string[];
+}
+
+export type Workspace = 'arrange' | 'write' | 'mix' | 'rec';
+export const WORKSPACES: { id: Workspace; label: string; title: string; tabs: DockTab[] }[] = [
+  { id: 'arrange', label: 'Arrange', tabs: [], title: 'Arrange: see the music, choose instruments, make a band and hear it. Start here.' },
+  { id: 'write', label: 'Write', tabs: ['roll', 'drums', 'chords', 'prog', 'lyrics', 'midi'], title: 'Write: enter and change notes, chords, drums and lyrics (note editing, piano roll, drum grid, chords, MIDI keyboard)' },
+  { id: 'mix', label: 'Mix', tabs: ['mixer', 'auto', 'audio', 'sounds'], title: 'Mix: balance the instruments, add effects, audio tracks and other sounds, then export' },
+  { id: 'rec', label: 'Recordings', tabs: ['rec'], title: 'Recordings: turn a recording (MP3/WAV) or a PDF/photo of sheet music into notes you can edit and play' },
+];
+export function workspaceOf(tab: DockTab): Workspace {
+  return WORKSPACES.find((w) => w.tabs.includes(tab))?.id ?? 'arrange';
+}
+
+export interface Layout {
+  /** Tracks panel (left). */
+  leftOpen: boolean;
+  leftW: number;
+  /** Band panel (right, Arrange). */
+  rightOpen: boolean;
+  rightW: number;
+  /** Bottom panel height (Write / Mix / Recordings). */
+  dockH: number;
+  /** Last bottom-panel tab per workspace (null = folded away). */
+  dockTab: Partial<Record<Workspace, DockTab | null>>;
+  /** Zoom: 'fit' = follow the window width, or a scale (1 = 100 %). */
+  zoom: number | 'fit';
+  /** 'page' = wrapped like printed sheet music, 'scroll' = one long line. */
+  view: 'page' | 'scroll';
+}
+export const DEFAULT_LAYOUT: Layout = {
+  leftOpen: true, leftW: 250, rightOpen: false, rightW: 320, dockH: 300,
+  dockTab: { write: 'roll', mix: 'mixer', rec: 'rec' }, zoom: 'fit', view: 'page',
+};
+const LAYOUT_KEY = 'mg.layout.v1';
+function loadLayout(): Layout {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY);
+    if (raw) return { ...DEFAULT_LAYOUT, ...JSON.parse(raw) };
+  } catch { /* fresh layout */ }
+  return { ...DEFAULT_LAYOUT };
 }
 
 export type DockTab = 'roll' | 'drums' | 'chords' | 'prog' | 'midi' | 'mixer' | 'auto' | 'audio' | 'rec' | 'lyrics' | 'sounds';
@@ -134,6 +184,7 @@ export class Store {
     rsExport: { open: false, running: false, step: null, result: null, error: null }, tuningTrack: null,
     selTrack: 0, dock: null, explore: null, chart: { open: false, editing: false }, describeOpen: false, changesBar: null, drumPatterns: [],
     fxPresets: [], exportOpen: false, kbdPiano: false,
+    workspace: 'arrange', home: false, fullScore: false, layout: loadLayout(), recent: [],
   };
   private clip: Clip | null = null;
   /** Tests only: export into this folder instead of Documents\musicGenie\Rocksmith. */
@@ -165,7 +216,7 @@ export class Store {
     this.set({
       song, filePath, fileName, dirty: false, error: null, transposeTotal: 0, loadId: this.state.loadId + 1,
       band, confirm: null, chordPicker: null, info: null, cursor: null, rsImport: null, tuningTrack: null,
-      selTrack: Math.max(0, song.tracks.findIndex((t) => t.display.visible)), changesBar: null,
+      selTrack: Math.max(0, song.tracks.findIndex((t) => t.display.visible)), changesBar: null, home: false,
       rsExport: { open: false, running: false, step: null, result: null, error: null },
     });
     const sf = song.playback?.soundFont;
@@ -203,9 +254,16 @@ export class Store {
       }
       return;
     }
-    const f = await window.mg.readFile(path);
+    let f: { name: string; path: string; bytes: Uint8Array };
+    try {
+      f = await window.mg.readFile(path);
+    } catch (e) {
+      this.set({ error: 'Could not open ' + path + ': ' + (e as Error).message });
+      return;
+    }
     if (ext === 'xml' && isRocksmithXml(f.bytes)) return this.openRocksmith(path);
     this.openBytes(f.name, f.path, f.bytes);
+    if (!this.state.error && !/[\\/](packages|recovery|ml-temp|omr)[\\/]/i.test(path)) void this.addRecent(path);
   }
 
   /** Open a Rocksmith .psarc, a DLC Builder .rs2dlc project or a Rocksmith arrangement .xml. */
@@ -222,6 +280,7 @@ export class Store {
       const r = await window.mg.rs<RsReadResult>(cmd, { psarc: path, rs2dlc: path, xml: path, outDir });
       const { song, report } = songFromRocksmith(r);
       this.load(song, null, name);
+      void this.addRecent(path);
       this.set({
         rsImport: {
           file: path,
@@ -246,8 +305,12 @@ export class Store {
     this.set({ editMode: true, cursor: { track: 0, staff: 0, bar: 0, voice: 0, beat: 0, string: 1 } });
   }
 
+  /** Tests only: answers the next "Open…" instead of the native dialog. */
+  dialogOverride: (() => Promise<string | null>) | null = null;
   async openDialog() {
-    const p = await window.mg.openDialog();
+    const o = this.dialogOverride;
+    this.dialogOverride = null;
+    const p = o ? await o() : await window.mg.openDialog();
     if (p) await this.openPath(p);
   }
 
@@ -659,11 +722,45 @@ export class Store {
     if (!song) return;
     this.set({ selTrack: Math.max(0, Math.min(song.tracks.length - 1, i)) });
   }
+  /** Open a bottom-panel tab (switches to its workspace) or fold the panel away (null). */
   openDock(tab: DockTab | null) {
-    this.set({ dock: tab });
+    const ws = tab ? workspaceOf(tab) : this.state.workspace;
+    this.set({ dock: tab, workspace: ws, home: tab ? false : this.state.home, fullScore: tab ? false : this.state.fullScore });
+    if (ws !== 'arrange') this.setLayout({ dockTab: { ...this.state.layout.dockTab, [ws]: tab } });
   }
   exploreChord(name: string | null) {
-    this.set({ explore: name, dock: 'chords', chordPicker: null });
+    this.set({ explore: name, chordPicker: null });
+    this.openDock('chords');
+  }
+
+  // ----- Round 8: workspaces, home, full score, layout -----
+  setWorkspace(ws: Workspace) {
+    const tab = ws === 'arrange' ? null : this.state.layout.dockTab[ws] === undefined ? WORKSPACES.find((w) => w.id === ws)!.tabs[0] : this.state.layout.dockTab[ws]!;
+    this.set({ workspace: ws, dock: tab, home: false, fullScore: false });
+  }
+  showHome(on: boolean) {
+    this.set({ home: on, fullScore: false });
+  }
+  setFullScore(on: boolean) {
+    this.set({ fullScore: on, home: on ? false : this.state.home });
+  }
+  setLayout(p: Partial<Layout>) {
+    const layout = { ...this.state.layout, ...p };
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* not remembered */ }
+    this.set({ layout });
+  }
+  resetLayout() {
+    this.setLayout({ ...DEFAULT_LAYOUT });
+  }
+  async loadRecent() {
+    const st = await window.mg.settingsGet();
+    this.set({ recent: (st.recent ?? []).slice(0, 8) });
+  }
+  async addRecent(path: string) {
+    const st = await window.mg.settingsGet();
+    const recent = [path, ...(st.recent ?? []).filter((p) => p.toLowerCase() !== path.toLowerCase())].slice(0, 8);
+    await window.mg.settingsSet({ recent });
+    this.set({ recent });
   }
   /** Run an edit; report a thrown error in the app instead. */
   tryEdit(fn: (s: Song) => Song, label: string): boolean {

@@ -13,7 +13,8 @@ by hand.
 2. Virtual band: split parts, chord recognition, style-based accompaniment,
    "band conductor" controls (simplify drums, bass follows kick, piano melody
    to guitar solo).
-3. Tabs + Rocksmith 2014 import/export (guitar and bass).
+3. Tabs for guitar and bass (Rocksmith 2014 import/export is a **bonus**
+   export, File > Export > Rocksmith 2014…, not the centre of the app).
 4. Composition: staff entry, piano roll, chord explorer (inversions, voicings,
    fingerings), drum machine, harmonisation, chord suggestions.
 5. Production: mixer + effects, audio tracks, export.
@@ -30,3 +31,10 @@ by hand.
   opening or writing music, seeing it as sheet music/tabs, giving it
   instruments and a band, and hearing it. The UI must put the score first
   and explain every tool in plain words (Round 8).
+- 2026-11-17 (Round 8): the layout follows what you're doing. Menu bar (File,
+  Edit, View, Song, Tools, Help), one play bar, and four workspaces:
+  **Arrange** (default: score, tracks, band), **Write** (notes, piano roll,
+  drums, chords, lyrics, MIDI), **Mix** (mixer, effects, changes over time,
+  audio tracks, sounds) and **Recordings** (recording or PDF to sheet music).
+  The score gets most of the window; a Home screen, guided tours, a "?" help
+  page on every panel and a tooltip on every control explain the rest.

@@ -299,11 +299,35 @@ export class ScorePlayer {
     });
   }
 
-  /** One long row of bars (review view: lines up with the waveform) or pages. */
+  /** Round 8: the user's view choice ('page' = wrapped like printed music, 'scroll' = one long line). */
+  private viewMode: 'page' | 'scroll' = 'page';
+  private reviewHorizontal = false;
+  /** One long row of bars (review view: lines up with the waveform) or the user's view choice. */
   setHorizontal(on: boolean) {
-    const mode = on ? alphaTab.LayoutMode.Horizontal : alphaTab.LayoutMode.Page;
+    this.reviewHorizontal = on;
+    this.applyLayout();
+  }
+  setViewMode(mode: 'page' | 'scroll') {
+    this.viewMode = mode;
+    this.applyLayout();
+  }
+  private applyLayout() {
+    const mode = this.reviewHorizontal || this.viewMode === 'scroll' ? alphaTab.LayoutMode.Horizontal : alphaTab.LayoutMode.Page;
     if (this.api.settings.display.layoutMode === mode) return;
     this.api.settings.display.layoutMode = mode;
+    this.rerender();
+  }
+  /** Round 8: zoom (alphaTab display scale; 1 = 100 %). */
+  get scale() {
+    return this.api.settings.display.scale;
+  }
+  setScale(scale: number) {
+    const v = Math.round(Math.max(0.4, Math.min(3, scale)) * 100) / 100;
+    if (Math.abs(this.api.settings.display.scale - v) < 0.001) return;
+    this.api.settings.display.scale = v;
+    this.rerender();
+  }
+  private rerender() {
     this.api.updateSettings();
     if (this.api.score) {
       this.pendingScore = this.api.score;

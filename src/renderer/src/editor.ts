@@ -22,20 +22,20 @@ const cursorKey = (c: Cursor) => `${c.track}:${c.staff}:${c.bar}:${c.voice}:${c.
 const BEND_CYCLE: TechniqueId[] = ['bendFull', 'bendHalf', 'bendFullHalf', 'bendRelease'];
 
 export const TECH_KEYS: { id: TechniqueId; key: string; label: string; title: string }[] = [
-  { id: 'hopo', key: 'H', label: 'H/P', title: 'Hammer-on / pull-off (H; direction from the previous note on the string). P = pull-off' },
-  { id: 'slide', key: 'S', label: '/', title: 'Slide to the next note (S). Shift+S = legato slide' },
-  { id: 'slideOutDown', key: 'U', label: '\\', title: 'Unpitched slide out, down (U). Shift+U = up' },
-  { id: 'bendFull', key: 'B', label: 'b', title: 'Bend (B cycles: full, ½, 1½, bend + release)' },
-  { id: 'vibrato', key: 'V', label: '~', title: 'Vibrato (V)' },
-  { id: 'palmMute', key: 'M', label: 'PM', title: 'Palm mute (M)' },
-  { id: 'dead', key: 'X', label: 'x', title: 'Fret-hand mute / dead note (X)' },
-  { id: 'harmonic', key: 'N', label: '<>', title: 'Natural harmonic (N). Shift+N = pinch harmonic' },
-  { id: 'pinchHarmonic', key: 'Shift+N', label: 'PH', title: 'Pinch harmonic (Shift+N)' },
-  { id: 'tap', key: 'T', label: 'T', title: 'Tap (T)' },
-  { id: 'slap', key: 'K', label: 'S', title: 'Slap (K)' },
-  { id: 'pop', key: 'O', label: 'P', title: 'Pop (O)' },
-  { id: 'accent', key: '>', label: '>', title: 'Accent (>)' },
-  { id: 'tremolo', key: 'W', label: '≡', title: 'Tremolo picking (W)' },
+  { id: 'hopo', key: 'H', label: 'H/P', title: 'Hammer-on / pull-off: the next note sounds by hammering or pulling the finger, without picking (direction from the previous note on the string). Key: H; P = pull-off' },
+  { id: 'slide', key: 'S', label: '/', title: 'Slide: glide along the string to the next note. Key: S; Shift+S = legato slide (the second note is not picked)' },
+  { id: 'slideOutDown', key: 'U', label: '\\', title: 'Slide out: slide off the note downwards to no particular pitch, as an ending flourish. Key: U; Shift+U = up' },
+  { id: 'bendFull', key: 'B', label: 'b', title: 'Bend: push the string to raise the pitch. Key: B cycles full, ½, 1½, bend + release' },
+  { id: 'vibrato', key: 'V', label: '~', title: 'Vibrato: wobble the pitch slightly to make a held note sing. Key: V' },
+  { id: 'palmMute', key: 'M', label: 'PM', title: 'Palm mute: rest the picking hand on the strings for a short, chunky sound (rock riffs). Key: M' },
+  { id: 'dead', key: 'X', label: 'x', title: 'Dead note (fret-hand mute): a muted click with no pitch, for rhythm. Key: X' },
+  { id: 'harmonic', key: 'N', label: '<>', title: 'Natural harmonic: touch the string lightly over the fret for a bell-like tone. Key: N; Shift+N = pinch harmonic' },
+  { id: 'pinchHarmonic', key: 'Shift+N', label: 'PH', title: 'Pinch harmonic: a squealing high overtone made with the picking thumb (rock/metal leads). Key: Shift+N' },
+  { id: 'tap', key: 'T', label: 'T', title: 'Tap: hit the note on the fretboard with a picking-hand finger (fast lead runs). Key: T' },
+  { id: 'slap', key: 'K', label: 'S', title: 'Slap (bass): hit the string with the thumb for a punchy, funky note. Key: K' },
+  { id: 'pop', key: 'O', label: 'P', title: 'Pop (bass): pull the string up so it snaps against the frets. Key: O' },
+  { id: 'accent', key: '>', label: '>', title: 'Accent: play this note louder than the others. Key: >' },
+  { id: 'tremolo', key: 'W', label: '≡', title: 'Tremolo picking: pick the note very fast, over and over. Key: W' },
 ];
 
 export function applyTechnique(store: Store, id: TechniqueId) {

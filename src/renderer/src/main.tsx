@@ -21,6 +21,7 @@ import { startAutoSing } from './singing';
 import { trackBank } from '../../model';
 import { installTestApiR6 } from './testApiR6';
 import { installTestApiR7 } from './testApiR7';
+import { installTestApiR8 } from './testApiR8';
 import { analysisCtl, playerCtl } from './Round6';
 import './styles.css';
 
@@ -62,5 +63,6 @@ if (new URLSearchParams(location.search).get('print') === '1') {
     installTestApi(store, () => player, () => backing, midi, audio, kbd);
     installTestApiR6(store, analysis, () => player);
     installTestApiR7(store, analysis, () => player);
+    installTestApiR8(store, () => player);
   }
 }

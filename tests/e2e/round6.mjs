@@ -352,7 +352,9 @@ try {
     await ev(page, () => window.mgTest.detectBeats());
     const st = await ev(page, () => window.mgTest.separateStems());
     const tx = await ev(page, (id) => window.mgTest.transcribe(id, { kind: 'bass', grid: '1/16', loose: false }), st.trackIds.bass);
-    await rendered(page, () => ev(page, ({ stem, tx }) => window.mgTest.review({ on: true, source: 'stemtx', stemId: stem, txId: tx, spectrogram: false }), { stem: st.trackIds.bass, tx: tx.trackId }));
+    // Review is already on (horizontal) from the tone check: only wait if this re-renders.
+    await ev(page, ({ stem, tx }) => window.mgTest.review({ on: true, source: 'stemtx', stemId: stem, txId: tx, spectrogram: false }), { stem: st.trackIds.bass, tx: tx.trackId });
+    await ev(page, () => window.mgTest.settle());
     await sleep(1500);
     await screenshot(app, 'r6-6-review-waveform');
     await ev(page, () => window.mgTest.review({ spectrogram: true }));

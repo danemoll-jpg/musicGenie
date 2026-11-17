@@ -6,7 +6,8 @@
 //   --profile-dir=DIR  use DIR for app data (tests use a throwaway folder).
 //   --autosave-ms=N    autosave interval (default 120000 = 2 minutes).
 //   --open=FILE        open FILE on start-up.
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+//   --tour             start the first-run tour even when hidden (tests).
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, normalize } from 'node:path';
 import { unzipStore, zipStore } from './zip';
@@ -27,6 +28,7 @@ const flags = {
   hidden: process.argv.includes('--hidden'),
   autosaveMs: Number(flagValue('autosave-ms') ?? 120000) || 120000,
   open: flagValue('open') ?? null,
+  tour: process.argv.includes('--tour'),
 };
 
 const profileDir = flagValue('profile-dir');
@@ -55,6 +57,10 @@ interface AppSettings {
   latencyMs?: number;
   /** Round 7: the sound library (SoundFonts and SFZ instruments the user added). */
   soundLibrary?: { file: string; name: string; kind: 'sf2' | 'sfz' }[];
+  /** Round 8: recent files, first-run tour finished, window size/position. */
+  recent?: string[];
+  tourDone?: boolean;
+  window?: { x: number; y: number; width: number; height: number; maximized: boolean };
 }
 const settingsFile = () => join(app.getPath('userData'), 'settings.json');
 function readSettings(): AppSettings {
@@ -109,9 +115,20 @@ function cleanExit() {
 let win: BrowserWindow | null = null;
 
 function createWindow() {
+  // Round 8: the app has its own menu bar, Full score (F11) and zoom (Ctrl +/-/0). Keep Electron's
+  // edit roles and reload/dev tools, but not its page zoom and full-screen accelerators.
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'editMenu' },
+    { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }] },
+  ]));
+  // Round 8: opens maximized the first time, then at the size/position it was closed at (not in tests).
+  const saved = flags.hidden ? undefined : readSettings().window;
   win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: saved?.width ?? 1440,
+    height: saved?.height ?? 900,
+    ...(saved ? { x: saved.x, y: saved.y } : {}),
+    minWidth: 900,
+    minHeight: 560,
     show: false,
     skipTaskbar: flags.hidden,
     focusable: !flags.hidden,
@@ -131,7 +148,29 @@ function createWindow() {
     },
   });
   if (flags.hidden) win.webContents.setFrameRate(30);
-  if (!flags.hidden) win.once('ready-to-show', () => win?.show());
+  if (!flags.hidden) {
+    win.once('ready-to-show', () => {
+      if (!saved || saved.maximized) win?.maximize();
+      win?.show();
+    });
+    let t: NodeJS.Timeout | undefined;
+    const remember = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        if (!win || win.isDestroyed() || win.isMinimized()) return;
+        const maximized = win.isMaximized();
+        const b = maximized ? (readSettings().window ?? { ...win.getNormalBounds() }) : win.getBounds();
+        writeSettings({ window: { x: b.x, y: b.y, width: b.width, height: b.height, maximized } });
+      }, 400);
+    };
+    for (const ev of ['resize', 'move', 'maximize', 'unmaximize'] as const) win.on(ev as 'resize', remember);
+    win.on('close', () => {
+      if (!win || win.isMinimized()) return;
+      const maximized = win.isMaximized();
+      const b = maximized ? win.getNormalBounds() : win.getBounds();
+      writeSettings({ window: { x: b.x, y: b.y, width: b.width, height: b.height, maximized } });
+    });
+  }
 
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
   else win.loadURL('app://musicgenie/index.html');

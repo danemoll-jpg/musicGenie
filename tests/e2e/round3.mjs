@@ -34,7 +34,15 @@ async function open(page, file) {
   await page.evaluate((p) => window.mgTest.open(p), file);
   await page.evaluate(() => window.mgTest.waitReady(60000));
 }
+// Round 8: the old toolbar buttons now live in the File menu (File > New, File > Export > Rocksmith 2014…).
+const MENU_FOR = { New: 'file:new', '⇪ Rocksmith': 'file:export' };
+const MENU_TEXT = { New: null, '⇪ Rocksmith': 'Rocksmith 2014' };
 async function clickButton(page, startsWith) {
+  if (startsWith in MENU_FOR) {
+    await page.evaluate((m) => window.mgTest.menu(m), MENU_FOR[startsWith]);
+    if (!MENU_TEXT[startsWith]) return;
+    startsWith = MENU_TEXT[startsWith];
+  }
   const ok = await page.evaluate((t) => {
     const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim().startsWith(t) && !x.disabled);
     b?.click();
@@ -71,6 +79,7 @@ try {
   const exportRoot = join(profileDir, 'exports');
   mkdirSync(exportRoot, { recursive: true });
   ({ app, page } = await launch({ dev, profileDir }));
+  await page.evaluate(() => window.mgTest.setLayout({ rightOpen: true })); // Round 8: band panel starts folded
   const win = await windowInfo(app);
   const masterGain = await ev(page, () => window.mgTest.state().masterGain);
   console.log('window:', JSON.stringify(win), 'masterGain at start:', masterGain);

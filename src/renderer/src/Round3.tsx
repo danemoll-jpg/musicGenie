@@ -11,11 +11,16 @@ import { applyTechnique, copySelection, tabMode, TECH_KEYS } from './editor';
 import type { PlayerStatus, Rect, ScorePlayer } from './player';
 import { exportRocksmith } from './rocksmithExport';
 import type { AppState, Store } from './store';
+import { HelpButton, MoreOptions } from './HelpUi';
 
-const DURATIONS: { base: DurationBase; label: string; name: string }[] = [
-  { base: 1, label: '𝅝', name: 'Whole' }, { base: 2, label: '𝅗𝅥', name: 'Half' }, { base: 4, label: '♩', name: 'Quarter' },
-  { base: 8, label: '♪', name: 'Eighth' }, { base: 16, label: '16', name: 'Sixteenth' }, { base: 32, label: '32', name: '32nd' },
-  { base: 64, label: '64', name: '64th' },
+const DURATIONS: { base: DurationBase; label: string; name: string; tip: string }[] = [
+  { base: 1, label: '𝅝', name: 'Whole', tip: 'Whole note (𝅝): 4 beats. Use for long held notes' },
+  { base: 2, label: '𝅗𝅥', name: 'Half', tip: 'Half note (𝅗𝅥): 2 beats. Use for slow, held notes' },
+  { base: 4, label: '♩', name: 'Quarter', tip: 'Quarter note (♩): 1 beat, the usual step of a song' },
+  { base: 8, label: '♪', name: 'Eighth', tip: 'Eighth note (♪): a half beat. Use for faster notes' },
+  { base: 16, label: '16', name: 'Sixteenth', tip: 'Sixteenth note: a quarter of a beat. Use for fast runs and riffs' },
+  { base: 32, label: '32', name: '32nd', tip: '32nd note: an eighth of a beat. Very fast notes' },
+  { base: 64, label: '64', name: '64th', tip: '64th note: a sixteenth of a beat. Extremely fast notes (rare)' },
 ];
 
 function beatAtCursor(song: Song, c: Cursor) {
@@ -37,18 +42,19 @@ export function EditBar({ state, store, player }: { state: AppState; store: Stor
   const dur = b?.duration;
   return (
     <div className="editbar" data-testid="editbar">
-      <span className="where" data-testid="cursor-info">{where}</span>
+      <HelpButton topic="edit-notes" label="bar" />
+      <span className="where" data-testid="cursor-info" title="Where the edit cursor is: click a note or beat in the score to move it">{where}</span>
       <div className="group" title="Note length (] shorter, [ longer)">
         {DURATIONS.map((d) => (
-          <button key={d.base} className={dur?.base === d.base ? 'chip' : ''} disabled={!c} title={d.name}
+          <button key={d.base} className={dur?.base === d.base ? 'chip' : ''} disabled={!c} title={d.tip + '. Keys: ] shorter, [ longer'}
             onClick={() => store.editAt((s, cc) => setDuration(s, cc, { base: d.base, dots: dur?.dots ?? 0, tuplet: dur?.tuplet }), d.name)}>{d.label}</button>
         ))}
-        <button className={dur?.dots ? 'chip' : ''} disabled={!c} title="Dotted (.)" onClick={() => store.editAt(toggleDot, 'Dot')}>•</button>
-        <button className={dur?.tuplet ? 'chip' : ''} disabled={!c} title="Triplet (Shift+T)" onClick={() => store.editAt(toggleTriplet, 'Triplet')}>3</button>
-        <button className={note?.tieFromPrevious ? 'chip' : ''} disabled={!c} title="Tie to the previous beat (L)" onClick={() => store.editAt(toggleTie, 'Tie')}>⁀</button>
-        <button disabled={!c} title="Make a rest (R)" onClick={() => store.editAt(makeRest, 'Rest')}>𝄽</button>
+        <button className={dur?.dots ? 'chip' : ''} disabled={!c} title="Dotted note: makes the note half as long again (a dotted quarter = 1½ beats). Key: ." onClick={() => store.editAt(toggleDot, 'Dot')}>•</button>
+        <button className={dur?.tuplet ? 'chip' : ''} disabled={!c} title="Triplet: three notes in the time of two, for a rolling or swung feel. Key: Shift+T" onClick={() => store.editAt(toggleTriplet, 'Triplet')}>3</button>
+        <button className={note?.tieFromPrevious ? 'chip' : ''} disabled={!c} title="Tie: join this note to the same note before it, so it rings on instead of playing again. Key: L" onClick={() => store.editAt(toggleTie, 'Tie')}>⁀</button>
+        <button disabled={!c} title="Rest: make this beat silent. Key: R" onClick={() => store.editAt(makeRest, 'Rest')}>𝄽</button>
       </div>
-      <div className="group palette" title="Techniques (apply to the note on the cursor string)">
+      <div className="group palette" title="Playing techniques (guitar/bass): apply to the note on the cursor string">
         {TECH_KEYS.map((tk) => (
           <button key={tk.id} disabled={!b?.notes.length} title={tk.title} data-tech={tk.id}
             className={note && (tk.id === 'bendFull' ? !!note.techniques?.bend : hasTechnique(note, tk.id)) ? 'chip' : ''}
@@ -56,14 +62,14 @@ export function EditBar({ state, store, player }: { state: AppState; store: Stor
         ))}
       </div>
       <div className="group">
-        <button disabled={!c} title="Delete the note on this string (Delete)" onClick={() => store.editAt((s, cc) => deleteNote(s, cc, !tab), 'Delete note')}>✕ Note</button>
-        <button disabled={!c} title="Insert a beat (Insert)" onClick={() => store.editAt(insertBeat, 'Insert beat')}>+ Beat</button>
-        <button disabled={!c} title="Delete this beat (Shift+Delete)" onClick={() => store.editAt(deleteBeat, 'Delete beat')}>− Beat</button>
-        <button disabled={!c} title="Insert a bar before this one (Ctrl+Insert)" onClick={() => store.editAt((s, cc) => insertBars(s, cc.bar, 1), 'Insert bar')}>+ Bar</button>
-        <button disabled={!c || song.bars.length < 2} title="Delete this bar, or the selected bars (Ctrl+Delete)"
+        <button disabled={!c} title="Delete the note on this string (the beat stays, as a rest if it was the only note). Key: Delete" onClick={() => store.editAt((s, cc) => deleteNote(s, cc, !tab), 'Delete note')}>✕ Note</button>
+        <button disabled={!c} title="Insert a beat here, pushing the rest of the bar along. Key: Insert" onClick={() => store.editAt(insertBeat, 'Insert beat')}>+ Beat</button>
+        <button disabled={!c} title="Delete this whole beat (every note on it). Key: Shift+Delete" onClick={() => store.editAt(deleteBeat, 'Delete beat')}>− Beat</button>
+        <button disabled={!c} title="Insert an empty bar before this one, e.g. to make room for a new part. Key: Ctrl+Insert" onClick={() => store.editAt((s, cc) => insertBars(s, cc.bar, 1), 'Insert bar')}>+ Bar</button>
+        <button disabled={!c || song.bars.length < 2} title="Delete this bar, or the bars selected in the score (every track). Key: Ctrl+Delete"
           onClick={() => { store.editAt((s, cc) => deleteBars(s, range?.startBar ?? cc.bar, range?.endBar ?? cc.bar), 'Delete bars'); player?.clearRange(); }}>− Bar</button>
-        <button disabled={!c} title="Copy this beat, or the selected bars (Ctrl+C)" onClick={() => copySelection(store, player)}>Copy</button>
-        <button disabled={!c || !state.hasClip} title="Paste (Ctrl+V)" onClick={() => { const clip = store.getClip(); if (clip) store.editAt((s, cc) => paste(s, cc, clip), 'Paste'); }}>Paste</button>
+        <button disabled={!c} title="Copy this beat, or the bars selected in the score, to paste somewhere else. Key: Ctrl+C" onClick={() => copySelection(store, player)}>Copy</button>
+        <button disabled={!c || !state.hasClip} title="Paste what you copied at the cursor. Use to repeat a riff or a bar. Key: Ctrl+V" onClick={() => { const clip = store.getClip(); if (clip) store.editAt((s, cc) => paste(s, cc, clip), 'Paste'); }}>Paste</button>
       </div>
       <span className="sub hint">{tab ? 'Type frets (two digits quickly = 10-24); ↑↓ strings; Shift+↑↓ pitch' : 'Letters A-G (Shift = add to chord); ↑↓ pitch'} · ←→ beats · Esc ends editing</span>
     </div>
@@ -98,7 +104,7 @@ export function TuningControls({ track: t, store }: { track: Track; store: Store
   const names = t.tuning.map((p) => pitchName(p).replace(/-?\d+$/, '')).join(' ');
   return (
     <div className="row4">
-      <select value={cur?.id ?? 'custom'} title={'Tuning: ' + names} data-testid="tuning-select"
+      <select value={cur?.id ?? 'custom'} title={'Tuning: ' + names + '. How the strings are tuned; pick the one the song uses (e.g. Drop D for heavier riffs)'} data-testid="tuning-select"
         onChange={(e) => {
           if (e.target.value === 'custom') return store.openTuningDialog(t.id);
           const p = presets.find((x) => x.id === e.target.value);
@@ -107,10 +113,10 @@ export function TuningControls({ track: t, store }: { track: Track; store: Store
         {presets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         <option value="custom">{cur ? 'Custom…' : `Custom (${names})…`}</option>
       </select>
-      <select value={t.capo ?? 0} title="Capo" onChange={(e) => store.setCapo(t.id, Number(e.target.value))}>
+      <select value={t.capo ?? 0} title="Capo: a clamp across the strings at this fret that raises every string. Set it if the song is played with a capo" onChange={(e) => store.setCapo(t.id, Number(e.target.value))}>
         {Array.from({ length: 13 }, (_, i) => <option key={i} value={i}>{i ? `Capo ${i}` : 'No capo'}</option>)}
       </select>
-      <button title="Custom tuning; choose whether notes keep their pitch or their frets" onClick={() => store.openTuningDialog(t.id)}>…</button>
+      <button title="Custom tuning: set each string yourself and choose whether notes keep their sound or their frets" onClick={() => store.openTuningDialog(t.id)}>…</button>
     </div>
   );
 }
@@ -130,17 +136,17 @@ export function TuningDialog({ state, store }: { state: AppState; store: Store }
   return (
     <div className="modal-back" data-testid="tuning-dialog">
       <div className="modal">
-        <h3 className="mtitle">Tuning: {t.name}</h3>
+        <h3 className="mtitle">Tuning: {t.name} <HelpButton topic="tuning" label="dialog" /></h3>
         <div className="rowx wrap">
           <span className="sub">Preset</span>
-          <select value="" onChange={(e) => { const p = presets.find((x) => x.id === e.target.value); if (p) setPitches(p.pitches); }}>
+          <select value="" title="Start from a common tuning (standard, Drop D, …), then adjust single strings below" onChange={(e) => { const p = presets.find((x) => x.id === e.target.value); if (p) setPitches(p.pitches); }}>
             <option value="">choose…</option>
             {presets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div className="strings">
           {[...pitches].map((p, i) => ({ p, i })).reverse().map(({ p, i }) => (
-            <label key={i} className="rowx">
+            <label key={i} className="rowx" title={`The note string ${i + 1} is tuned to when played open (no fret)`}>
               <span className="sub">String {i + 1}{i === 0 ? ' (lowest)' : ''}</span>
               <select value={p} onChange={(e) => setPitches(pitches.map((x, j) => (j === i ? Number(e.target.value) : x)))}>
                 {PITCHES.map((q) => <option key={q} value={q}>{pitchName(q)}</option>)}
@@ -150,9 +156,9 @@ export function TuningDialog({ state, store }: { state: AppState; store: Store }
         </div>
         <p className="sub">Keep the sound: notes keep their pitch and move to new frets. Keep the frets: the same fingering, sounding in the new tuning.</p>
         <div className="rowx right">
-          <button onClick={() => store.openTuningDialog(null)}>Cancel</button>
-          <button onClick={() => apply('keepFrets')}>Apply, keep frets</button>
-          <button className="primary" onClick={() => apply('keepPitch')}>Apply, keep the sound</button>
+          <button onClick={() => store.openTuningDialog(null)} title="Close without changing the tuning">Cancel</button>
+          <button onClick={() => apply('keepFrets')} title="Same fingering (frets) as before; the music sounds in the new tuning. Use when tab was written for this tuning">Apply, keep frets</button>
+          <button className="primary" onClick={() => apply('keepPitch')} title="The music sounds the same; notes move to new frets that fit the new tuning">Apply, keep the sound</button>
         </div>
       </div>
     </div>
@@ -167,13 +173,13 @@ export function BackingRow({ song, store }: { song: Song; store: Store }) {
     <div className="track backing" data-testid="backing-row">
       <div className="row1">
         <span className="name" title={b.path}>🎧 {b.name}</span>
-        <button className={`ms ${b.mute ? 'on mute' : ''}`} title="Mute the recording" onClick={() => store.setBacking({ mute: !b.mute })}>M</button>
+        <button className={`ms ${b.mute ? 'on mute' : ''}`} title="Mute (M): silence the recording that plays along, e.g. to hear only the notes" onClick={() => store.setBacking({ mute: !b.mute })}>M</button>
       </div>
       <div className="row3">
-        <label title="Volume">Vol
+        <label title="Volume of the recording that plays along">Vol
           <input type="range" min={0} max={1} step={0.05} value={b.volume} onChange={(e) => store.setBacking({ volume: Number(e.target.value) })} />
         </label>
-        <label title="Where bar 1 starts in the recording (ms)">Start
+        <label title="Where bar 1 starts in the recording, in milliseconds. Change it if the recording and the notes are out of step">Start
           <input type="number" className="num" step={10} value={Math.round(b.offsetMs)} onChange={(e) => store.setBacking({ offsetMs: Number(e.target.value) })} />
         </label>
       </div>
@@ -259,7 +265,7 @@ export function RocksmithDialog({ state, store, player }: { state: AppState; sto
   return (
     <div className="modal-back" data-testid="rs-dialog">
       <div className="modal wide">
-        <h3 className="mtitle">Export to Rocksmith 2014</h3>
+        <h3 className="mtitle">Export to Rocksmith 2014 <HelpButton topic="rocksmith-export" label="dialog" /></h3>
         <div className="sub">Parts (6-string guitar or 4-string bass)</div>
         <table className="lineup">
           <tbody>
@@ -267,9 +273,9 @@ export function RocksmithDialog({ state, store, player }: { state: AppState; sto
               const a = chosen.get(t.id);
               return (
                 <tr key={t.id}>
-                  <td><label className="check"><input type="checkbox" checked={!!a} onChange={(e) => toggle(t, e.target.checked)} /> {t.name}</label></td>
-                  <td>{a && <select value={a.type} onChange={(e) => setArr(t.id, { type: e.target.value as RsArrangementType })}>{TYPES.map((x) => <option key={x}>{x}</option>)}</select>}</td>
-                  <td>{a && <label className="check" title="A bonus arrangement"><input type="checkbox" checked={!!a.bonus} onChange={(e) => setArr(t.id, { bonus: e.target.checked })} /> Bonus</label>}</td>
+                  <td><label className="check" title="Include this guitar or bass part in the Rocksmith song"><input type="checkbox" checked={!!a} onChange={(e) => toggle(t, e.target.checked)} /> {t.name}</label></td>
+                  <td>{a && <select value={a.type} title="Lead = the main guitar line, Rhythm = chords/backing guitar, Bass = bass guitar" onChange={(e) => setArr(t.id, { type: e.target.value as RsArrangementType })}>{TYPES.map((x) => <option key={x}>{x}</option>)}</select>}</td>
+                  <td>{a && <label className="check" title="Mark as a bonus (extra) arrangement: use when two parts are the same type, e.g. a second lead guitar"><input type="checkbox" checked={!!a.bonus} onChange={(e) => setArr(t.id, { bonus: e.target.checked })} /> Bonus</label>}</td>
                 </tr>
               );
             })}
@@ -279,42 +285,47 @@ export function RocksmithDialog({ state, store, player }: { state: AppState; sto
         <div className="grid2">
           <span className="sub">Vocals (lyrics)</span>
           <span className="rowx">
-            <select value={s.vocals?.trackId ?? ''} data-testid="rs-vocals" onChange={(e) => up({ vocals: e.target.value ? { trackId: e.target.value, verse: 0 } : undefined })}>
+            <select value={s.vocals?.trackId ?? ''} data-testid="rs-vocals" title="Which track's lyrics Rocksmith shows as karaoke words (none = no lyrics)" onChange={(e) => up({ vocals: e.target.value ? { trackId: e.target.value, verse: 0 } : undefined })}>
               <option value="">none</option>
               {song.tracks.filter((t) => hasLyrics(t)).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             {s.vocals && (() => { const t = song.tracks.find((x) => x.id === s.vocals!.trackId); const n = t ? verseCount(t) : 0; return n > 1 ? (
-              <select value={s.vocals.verse ?? 0} onChange={(e) => up({ vocals: { ...s.vocals!, verse: Number(e.target.value) } })}>
+              <select value={s.vocals.verse ?? 0} title="Which verse of the lyrics to show" onChange={(e) => up({ vocals: { ...s.vocals!, verse: Number(e.target.value) } })}>
                 {Array.from({ length: n }, (_, i) => <option key={i} value={i}>verse {i + 1}</option>)}
               </select>) : null; })()}
           </span>
-          <span className="sub">Title</span><input value={s.title ?? ''} onChange={(e) => up({ title: e.target.value })} />
-          <span className="sub">Artist</span><input value={s.artist ?? ''} onChange={(e) => up({ artist: e.target.value })} />
-          <span className="sub">Album</span><input value={s.album ?? ''} onChange={(e) => up({ album: e.target.value })} />
-          <span className="sub">Year</span><input type="number" value={s.year ?? ''} onChange={(e) => up({ year: Number(e.target.value) || undefined })} />
-          <span className="sub">Album art</span>
-          <span className="rowx"><span className="path">{s.albumArt || 'plain cover'}</span>
-            <button onClick={async () => { const p = await window.mg.pickFile('Album art', [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'dds', 'bmp'] }]); if (p) up({ albumArt: p }); }}>Choose…</button></span>
-          <span className="sub">Preview starts at</span>
-          <span className="rowx"><input type="number" className="num" min={0} step={1} value={Math.round((s.previewStartMs ?? 0) / 1000)} onChange={(e) => up({ previewStartMs: Number(e.target.value) * 1000 })} /> s</span>
+          <span className="sub">Title</span><input value={s.title ?? ''} onChange={(e) => up({ title: e.target.value })} title="Song title shown in Rocksmith's song list" />
+          <span className="sub">Artist</span><input value={s.artist ?? ''} onChange={(e) => up({ artist: e.target.value })} title="Artist name shown in Rocksmith" />
+          <span className="sub">Details</span>
+          <MoreOptions title="Album, year, cover picture and where the song-list preview starts: optional details">
+            <div className="grid2">
+              <span className="sub">Album</span><input value={s.album ?? ''} onChange={(e) => up({ album: e.target.value })} title="Album name shown in Rocksmith" />
+              <span className="sub">Year</span><input type="number" value={s.year ?? ''} onChange={(e) => up({ year: Number(e.target.value) || undefined })} title="Release year shown in Rocksmith" />
+              <span className="sub">Album art</span>
+              <span className="rowx"><span className="path">{s.albumArt || 'plain cover'}</span>
+                <button onClick={async () => { const p = await window.mg.pickFile('Album art', [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'dds', 'bmp'] }]); if (p) up({ albumArt: p }); }} title="Pick a picture for the song's cover in Rocksmith (otherwise a plain cover is made)">Choose…</button></span>
+              <span className="sub">Preview starts at</span>
+              <span className="rowx"><input type="number" className="num" min={0} step={1} value={Math.round((s.previewStartMs ?? 0) / 1000)} onChange={(e) => up({ previewStartMs: Number(e.target.value) * 1000 })} title="Second of the song where the short preview Rocksmith plays in its song list starts" /> s</span>
+            </div>
+          </MoreOptions>
           <span className="sub">Audio</span>
           <span className="rowx wrap">
-            <label className="check"><input type="radio" checked={s.audio === 'mix'} onChange={() => up({ audio: 'mix' })} /> Full mix</label>
-            <label className="check"><input type="radio" checked={s.audio === 'mixWithout'} onChange={() => up({ audio: 'mixWithout' })} /> Mix without the exported parts</label>
-            <label className="check"><input type="radio" checked={s.audio === 'file'} onChange={() => up({ audio: 'file' })} /> Recording</label>
+            <label className="check" title="The music Rocksmith plays: the whole song as musicGenie plays it"><input type="radio" checked={s.audio === 'mix'} onChange={() => up({ audio: 'mix' })} /> Full mix</label>
+            <label className="check" title="The whole song without the parts you export, so you play them yourself"><input type="radio" checked={s.audio === 'mixWithout'} onChange={() => up({ audio: 'mixWithout' })} /> Mix without the exported parts</label>
+            <label className="check" title="Use a recording (audio file) of the song instead of musicGenie's own playback"><input type="radio" checked={s.audio === 'file'} onChange={() => up({ audio: 'file' })} /> Recording</label>
           </span>
           {s.audio === 'file' && <>
             <span className="sub">Recording</span>
             <span className="rowx"><span className="path">{s.audioFile || 'none'}</span>
-              <button onClick={async () => { const p = await window.mg.pickFile('Song recording', [{ name: 'Audio', extensions: ['wav', 'mp3', 'ogg', 'flac'] }]); if (p) up({ audioFile: p }); }}>Choose…</button></span>
+              <button onClick={async () => { const p = await window.mg.pickFile('Song recording', [{ name: 'Audio', extensions: ['wav', 'mp3', 'ogg', 'flac'] }]); if (p) up({ audioFile: p }); }} title="Pick the audio file (WAV, MP3, OGG, FLAC) of the song">Choose…</button></span>
             <span className="sub">Bar 1 starts at</span>
-            <span className="rowx"><input type="number" className="num" step={10} value={Math.round(s.audioOffsetMs ?? 0)} onChange={(e) => up({ audioOffsetMs: Number(e.target.value) })} /> ms in the recording</span>
+            <span className="rowx"><input type="number" className="num" step={10} value={Math.round(s.audioOffsetMs ?? 0)} onChange={(e) => up({ audioOffsetMs: Number(e.target.value) })} title="Where bar 1 starts in the recording, in milliseconds, so the notes line up with it" /> ms in the recording</span>
           </>}
           <span className="sub">Rocksmith</span>
           <span className="rowx wrap">
-            <label className="check"><input type="checkbox" checked={copy} disabled={!dlc} onChange={(e) => setCopy(e.target.checked)} /> Copy into</label>
+            <label className="check" title="Also copy the finished song into Rocksmith's dlc folder so it shows up in the game"><input type="checkbox" checked={copy} disabled={!dlc} onChange={(e) => setCopy(e.target.checked)} /> Copy into</label>
             <span className="path">{dlc ?? 'Rocksmith 2014 not found'}</span>
-            <button onClick={async () => { const p = await window.mg.pickFolder('Rocksmith 2014 dlc folder'); if (p) { setDlc(p); await window.mg.settingsSet({ rocksmithDlc: p }); } }}>Change…</button>
+            <button onClick={async () => { const p = await window.mg.pickFolder('Rocksmith 2014 dlc folder'); if (p) { setDlc(p); await window.mg.settingsSet({ rocksmithDlc: p }); } }} title="Pick Rocksmith 2014's dlc folder (where custom songs go)">Change…</button>
           </span>
           <span className="sub">Wwise</span>
           <span className={wwise?.found ? '' : 'problem'}>{wwise === null ? 'checking…' : wwise.found ? `Wwise ${wwise.version} (${wwise.path})` : 'Not found: the export will stop before the audio conversion and keep a DLC Builder project.'}</span>
@@ -329,12 +340,12 @@ export function RocksmithDialog({ state, store, player }: { state: AppState; sto
             {r.issues.slice(0, 12).map((i, k) => <div key={k} className={i.severity === 'error' ? 'problem' : 'sub'}>{i.arrangement}: {i.type}{i.timeMs !== null ? ` at ${(i.timeMs / 1000).toFixed(2)} s` : ''}</div>)}
             {r.copiedTo && <div className="sub">Copied to {r.copiedTo}</div>}
             {r.stage !== 'done' && <div className="sub">Kept: arrangement XML, the WAV and a DLC Builder project you can finish by hand: {r.rs2dlc}</div>}
-            <button onClick={() => window.mg.reveal(r.psarc ?? r.rs2dlc)}>Show files</button>
+            <button onClick={() => window.mg.reveal(r.psarc ?? r.rs2dlc)} title="Open the folder with the exported files">Show files</button>
           </div>
         )}
         <div className="rowx right">
-          <button onClick={() => store.openRsExport(false)}>Close</button>
-          <button className="primary" data-testid="rs-export" disabled={ex.running || !s.arrangements.length || problems.length > 0 || !player} onClick={() => void run()}>Export</button>
+          <button onClick={() => store.openRsExport(false)} title="Close this dialog (your settings are kept for next time once you export)">Close</button>
+          <button className="primary" data-testid="rs-export" title="Make the Rocksmith 2014 song file (.psarc) from the chosen parts" disabled={ex.running || !s.arrangements.length || problems.length > 0 || !player} onClick={() => void run()}>Export</button>
         </div>
       </div>
     </div>

@@ -9,6 +9,7 @@ import {
 import { liveSynth } from './audio/liveSynth';
 import type { PlayerStatus } from './player';
 import type { AppState, Store } from './store';
+import { HelpButton } from './HelpUi';
 
 const HI = 108; // C8
 const LO = 21; // A0
@@ -254,21 +255,23 @@ export function PianoRoll({ state, store, status }: { state: AppState; store: St
   return (
     <div className="pr" tabIndex={0} onKeyDown={onKey} data-testid="piano-roll">
       <div className="pr-tools">
-        <span className="lbl">Snap</span>
-        <select value={snapId} onChange={(e) => setSnapId(e.target.value)} data-testid="roll-snap">
-          {SNAPS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-        </select>
+        <HelpButton topic="piano-roll" />
+        <label className="lbl" title="Snap to grid (quantise): new, moved and resized notes line up on this step. Finer steps for fast notes, ‘T’ steps for triplets">Snap to grid
+          <select value={snapId} onChange={(e) => setSnapId(e.target.value)} data-testid="roll-snap">
+            {SNAPS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </label>
         <span className="lbl">Zoom</span>
-        <button onClick={() => setPpq(Math.max(12, Math.round(ppq / 1.4)))} title="Zoom out">−</button>
-        <button onClick={() => setPpq(Math.min(240, Math.round(ppq * 1.4)))} title="Zoom in">+</button>
+        <button onClick={() => setPpq(Math.max(12, Math.round(ppq / 1.4)))} title="Zoom out: see more bars at once">−</button>
+        <button onClick={() => setPpq(Math.min(240, Math.round(ppq * 1.4)))} title="Zoom in: wider notes, easier to draw short ones">+</button>
         {track.staves.length > 1 && (
-          <select value={st} onChange={(e) => setStaff(Number(e.target.value))} title="Staff">
+          <select value={st} onChange={(e) => setStaff(Number(e.target.value))} title="Which staff of this track to edit (e.g. piano right hand = staff 1, left hand = staff 2)">
             {track.staves.map((_, i) => <option key={i} value={i}>Staff {i + 1}</option>)}
           </select>
         )}
         <span className="sub">{notes.length} notes{selIds.length ? ` · ${selIds.length} selected` : ''}</span>
-        <button disabled={!selIds.length} onClick={() => onDelete(selIds)} title="Delete the selected notes (Delete)">Delete</button>
-        <span className="sub hint">Drag on empty space to draw · drag a note to move, its right edge to resize · right-click deletes · Shift+click adds to the selection</span>
+        <button disabled={!selIds.length} onClick={() => onDelete(selIds)} title="Delete the selected notes. Use it to clear out wrong notes. Key: Delete">Delete</button>
+        <span className="sub hint">Drag on empty space to draw · drag a note to move, its right edge to resize · right-click deletes · Shift+click adds to the selection · bottom strip: drag a bar up/down to set how loud a note is (velocity)</span>
       </div>
       <div className="pr-body">
         <div className="pr-keys" ref={keysRef}>
@@ -302,7 +305,7 @@ export function PianoRoll({ state, store, status }: { state: AppState; store: St
               <line x1={playX} x2={playX} y1={0} y2={height} className="pr-play" />
             </svg>
           </div>
-          <div className="pr-vel" ref={velRef}>
+          <div className="pr-vel" ref={velRef} title="Loudness (velocity) of each note: drag a bar up for louder, down for softer">
             <svg width={width} height={VEL_H} onPointerDown={velDown} onPointerMove={velMove} onPointerUp={velUp} data-testid="roll-vel">
               {starts.map((t, b) => <line key={b} x1={x(t)} x2={x(t)} y1={0} y2={VEL_H} className="pr-bar" />)}
               {shown.map((n) => (

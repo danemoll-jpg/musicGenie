@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { barStartTicks, barTicks, FX_DEFS, laneRange, type AutoLane, type AutoPoint, type Song, type Track } from '../../model';
 import type { PlayerStatus } from './player';
 import type { AppState, Store } from './store';
+import { HelpButton } from './HelpUi';
 
 const BAR_PX = 90;
 const H = 72;
@@ -49,8 +50,8 @@ function Lane({ song, track, lane, li, store, playX }: { song: Song; track: Trac
       <div className="lane-head">
         <b>{r.name}</b>
         <span className="hint">{lane.points.length} points · click = add, drag = move, right-click = delete</span>
-        <button onClick={() => setPoints(() => [], 'Clear automation')} disabled={!lane.points.length}>Clear</button>
-        <button onClick={() => store.setAutomation(track.id, (lanes) => lanes.filter((_, k) => k !== li), 'Remove automation lane')}>Remove lane</button>
+        <button onClick={() => setPoints(() => [], 'Clear automation')} disabled={!lane.points.length} title="Delete every point on this line, so the setting stays still again">Clear</button>
+        <button onClick={() => store.setAutomation(track.id, (lanes) => lanes.filter((_, k) => k !== li), 'Remove automation lane')} title="Remove this line completely, when you no longer want this setting to change">Remove line</button>
       </div>
       <svg ref={svg} width={W} height={H} data-testid={'lane-' + lane.param}
         onPointerDown={(e) => {
@@ -109,16 +110,18 @@ export function AutomationPanel({ state, store, status }: { state: AppState; sto
   return (
     <div className="auto-panel" data-testid="automation">
       <div className="pr-tools">
-        <span className="lbl">Automation of <b>{t.name}</b></span>
-        <select value="" onChange={(e) => e.target.value && store.setAutomation(t.id, (l) => [...l, { param: e.target.value, points: [] }], 'Add automation lane')} data-testid="auto-add">
-          <option value="">+ Lane…</option>
+        <HelpButton topic="changes-over-time" label="panel" />
+        <span className="lbl" title="Changes over time (automation): settings that move by themselves as the song plays">Changes over time for <b>{t.name}</b></span>
+        <select value="" onChange={(e) => e.target.value && store.setAutomation(t.id, (l) => [...l, { param: e.target.value, points: [] }], 'Add automation lane')} data-testid="auto-add"
+          title="Pick a setting (volume, pan or an effect knob) to change during the song, e.g. a fade-out or more echo in the chorus">
+          <option value="">+ Setting to change…</option>
           {options.map((o) => <option key={o.param} value={o.param}>{o.name}</option>)}
         </select>
-        <span className="hint">An automated knob follows its lane while playing and in exports.</span>
+        <span className="hint">The setting follows its line while playing and in exports.</span>
       </div>
       <div className="lanes">
         {lanes.map((l, i) => <Lane key={l.param} song={song} track={t} lane={l} li={i} store={store} playX={playX} />)}
-        {!lanes.length && <div className="hint" style={{ padding: 10 }}>No lanes yet: pick a parameter in “+ Lane…”.</div>}
+        {!lanes.length && <div className="hint" style={{ padding: 10 }}>Nothing changes over time yet: pick a setting in “+ Setting to change…”.</div>}
       </div>
     </div>
   );

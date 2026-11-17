@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { chordName, parseChord, QUALITIES, SHARP_NAMES, FLAT_NAMES, type Quality } from '../../model';
 import type { AppState, Store } from './store';
+import { HelpButton } from './HelpUi';
 
 export function ConfirmDialog({ state, store }: { state: AppState; store: Store }) {
   if (!state.confirm) return null;
@@ -10,8 +11,8 @@ export function ConfirmDialog({ state, store }: { state: AppState; store: Store 
       <div className="modal">
         <p>{state.confirm.message}</p>
         <div className="rowx right">
-          <button onClick={() => store.answer(false)}>Cancel</button>
-          <button className="primary" onClick={() => store.answer(true)}>{state.confirm.yes}</button>
+          <button onClick={() => store.answer(false)} title="Close this question without doing anything">Cancel</button>
+          <button className="primary" onClick={() => store.answer(true)} title="Go ahead with what the question above describes">{state.confirm.yes}</button>
         </div>
       </div>
     </div>
@@ -37,24 +38,24 @@ export function ChordPickerPopover({ state, store }: { state: AppState; store: S
   const name = chordName({ root, quality, bass: bass < 0 ? root : bass }, flats);
   return (
     <div className="chord-picker" style={{ left: p.x, top: p.y }} data-testid="chord-picker">
-      <div className="cp-title">Chord at bar {p.bar + 1}{p.name ? `: ${p.name}` : ''}</div>
+      <div className="cp-title">Chord at bar {p.bar + 1}{p.name ? `: ${p.name}` : ''} <HelpButton topic="chord-picker" label="chord picker" /></div>
       <div className="rowx">
-        <select value={root} onChange={(e) => setRoot(Number(e.target.value))} title="Root">
+        <select value={root} onChange={(e) => setRoot(Number(e.target.value))} title="The chord's main note (its letter name, e.g. C or G): pick the note the chord is built on">
           {names.map((n, i) => <option key={n} value={i}>{n}</option>)}
         </select>
-        <select value={quality} onChange={(e) => setQuality(e.target.value as Quality)} title="Type">
+        <select value={quality} onChange={(e) => setQuality(e.target.value as Quality)} title="The chord's flavour: major sounds bright, minor sad, 7 bluesy; try a few and listen">
           {QUALITY_LIST.map((q) => <option key={q} value={q}>{(QUALITIES[q].suffix || 'maj')} · {QUALITIES[q].label}</option>)}
         </select>
-        <select value={bass} onChange={(e) => setBass(Number(e.target.value))} title="Bass note (slash chord)">
+        <select value={bass} onChange={(e) => setBass(Number(e.target.value))} title="A different lowest note for the bass (slash chord, e.g. C/E); leave on no slash if unsure">
           <option value={-1}>no slash</option>
           {names.map((n, i) => <option key={n} value={i}>/{n}</option>)}
         </select>
       </div>
       <div className="rowx right">
-        <button onClick={() => store.setChord(p.bar, p.tick, null)}>Remove</button>
-        <button onClick={() => store.exploreChord(name)} title="All the ways to play it (chord explorer)" data-testid="chord-explore">Explore…</button>
-        <button onClick={() => store.openChordPicker(null)}>Cancel</button>
-        <button className="primary" data-testid="chord-apply" onClick={() => store.setChord(p.bar, p.tick, name)}>Set {name}</button>
+        <button onClick={() => store.setChord(p.bar, p.tick, null)} title="Delete the chord symbol at this spot, e.g. if it was put there by mistake">Remove</button>
+        <button onClick={() => store.exploreChord(name)} title="See and hear all the ways to play this chord on guitar or piano (chord explorer)" data-testid="chord-explore">Explore…</button>
+        <button onClick={() => store.openChordPicker(null)} title="Close without changing the chord">Cancel</button>
+        <button className="primary" data-testid="chord-apply" title="Put this chord at this spot in the song; the band follows it when you generate" onClick={() => store.setChord(p.bar, p.tick, name)}>Set {name}</button>
       </div>
     </div>
   );
@@ -64,12 +65,13 @@ export function SettingsMenu({ state, store, soundFont }: { state: AppState; sto
   const [open, setOpen] = useState(false);
   return (
     <div className="menu-wrap">
-      <button onClick={() => setOpen(!open)} title="Settings">⚙ Settings</button>
+      <button onClick={() => setOpen(!open)} title="Choose the sound set (SoundFont) the instruments play with, e.g. for nicer pianos or guitars">⚙ Settings</button>
       {open && (
         <div className="menu" onMouseLeave={() => setOpen(false)}>
-          <div className="menu-info">SoundFont: <b>{soundFont}</b>{state.soundFontPath ? '' : ' (built in)'}</div>
-          <button onClick={() => { setOpen(false); void store.chooseSoundFont(); }}>Load SoundFont… (.sf2 / .sf3)</button>
-          <button disabled={!state.soundFontPath} onClick={() => { setOpen(false); void store.useDefaultSoundFont(); }}>Use the built-in SoundFont</button>
+          <div className="menu-info" title="The sound set (SoundFont) every instrument is played with">Sound set: <b>{soundFont}</b>{state.soundFontPath ? '' : ' (built in)'} <HelpButton topic="sound-set" label="sound set" /></div>
+          <button onClick={() => { setOpen(false); void store.chooseSoundFont(); }} title="Use a sound set file you downloaded (.sf2 / .sf3 SoundFont) for all instruments, e.g. for more realistic sounds">Load a sound set… (.sf2 / .sf3)</button>
+          <button disabled={!state.soundFontPath} onClick={() => { setOpen(false); void store.useDefaultSoundFont(); }}
+            title="Go back to the sound set that comes with the app, e.g. if a loaded one sounds wrong">Use the built-in sound set</button>
         </div>
       )}
     </div>

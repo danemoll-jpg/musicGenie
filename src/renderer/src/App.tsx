@@ -3,10 +3,15 @@ import { hashOf, librarySoundFiles, INSTRUMENT_GROUPS, INSTRUMENTS, STYLES, type
 import { BackingPlayer } from './audio/backing';
 import { BandPanel } from './BandPanel';
 import { editorKey } from './editor';
-import { ChordPickerPopover, ConfirmDialog, SettingsMenu } from './Overlays';
+import { ChordPickerPopover, ConfirmDialog } from './Overlays';
 import { DEFAULT_SOUNDFONT, ScorePlayer, type PlayerStatus } from './player';
 import { BackingRow, CursorOverlay, EditBar, RocksmithDialog, TuningControls, TuningDialog } from './Round3';
-import { ChangesDialog, ChartDialog, Dock, HarmonyMenu, KbdPianoToggle } from './Round4';
+import { ChangesDialog, ChartDialog, HarmonyMenu } from './Round4';
+import { Dock, Splitter } from './Workspace';
+import { HelpButton, helpCtl } from './HelpUi';
+import { Home, HelpDialog, MenuBar, PlayBar, TourOverlay, WorkspaceTabs, WorkspaceTools, menuCtl, openExample } from './Shell';
+import { tourCtl, tourHooks } from './tours';
+import { WORKSPACES } from './store';
 import { ExportDialog } from './Round5';
 import { JobBar } from './Round6';
 import { ReviewView } from './Review';
@@ -26,9 +31,6 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
   const scrollRef = useRef<HTMLDivElement>(null);
   const [player, setPlayer] = useState<ScorePlayer | null>(null);
   const [status, setStatus] = useState<PlayerStatus | null>(null);
-  const [showBand, setShowBand] = useState(true);
-  const [newMenu, setNewMenu] = useState(false);
-  const [songMenu, setSongMenu] = useState(false);
   const loadedSoundFont = useRef<string | null>('#');
   const backingRef = useRef<BackingPlayer | null>(null);
 
@@ -117,7 +119,17 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+      if (e.key === 'F11') { e.preventDefault(); if (store.state.song) store.setFullScore(!store.state.fullScore); return; }
+      if (e.key === 'F1') { e.preventDefault(); helpCtl.open(''); return; }
       if (!typing && e.key !== ' ' && editorKey(store, player, e)) { e.preventDefault(); return; }
+      if (e.key === 'Escape' && store.state.fullScore) { e.preventDefault(); store.setFullScore(false); return; }
+      if (e.ctrlKey && !e.altKey && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
+        e.preventDefault();
+        const cur = player?.scale ?? 1;
+        store.setLayout({ zoom: e.key === '0' ? 'fit' : e.key === '-' ? cur / 1.15 : cur * 1.15 });
+        return;
+      }
+      if (e.ctrlKey && !e.shiftKey && /^[1-4]$/.test(e.key)) { e.preventDefault(); store.setWorkspace(WORKSPACES[Number(e.key) - 1].id); return; }
       if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); store.undo(); }
       else if (e.ctrlKey && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); store.redo(); }
       else if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); void store.save(e.shiftKey); }
@@ -128,120 +140,85 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
     return () => window.removeEventListener('keydown', onKey);
   }, [player]);
 
+  // Round 8: view mode + zoom ('fit' follows the score width), Ctrl+wheel zoom.
+  useEffect(() => { player?.setViewMode(state.layout.view); }, [player, state.layout.view]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!player || !el) return;
+    const apply = () => {
+      const z = store.state.layout.zoom;
+      player.setScale(z === 'fit' ? Math.max(0.7, Math.min(2.2, (el.clientWidth - 40) / 1050)) : z);
+    };
+    apply();
+    const ro = new ResizeObserver(() => { if (store.state.layout.zoom === 'fit') apply(); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [player, state.layout.zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !player) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      store.setLayout({ zoom: player.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1) });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Round 8: recent files; the first-run tour (never in a hidden test window unless --tour).
+  useEffect(() => {
+    tourHooks.openExample = openExample;
+    tourHooks.openMenu = (id) => menuCtl.set(id);
+    void store.loadRecent();
+    void window.mg.settingsGet().then((st) => {
+      if (!st.tourDone && (!window.mg.flags.hidden || window.mg.flags.tour)) setTimeout(() => { if (!store.state.recovery) tourCtl.start('first', store); }, 600);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const song = state.song;
-  const p = state.practice;
+  const L = state.layout;
+  const full = state.fullScore && !!song;
+  const showHome = !song || state.home;
+  const startW = useRef(0);
   return (
-    <div className="app">
+    <div className={`app ${full ? 'full' : ''}`}>
       {state.recovery && (
         <div className="banner recovery" data-testid="recovery-banner">
           <span>
             musicGenie didn't close properly last time. Restore the work autosaved
             {state.recovery.savedAt ? ` at ${new Date(state.recovery.savedAt).toLocaleTimeString()}` : ''}?
           </span>
-          <button className="primary" onClick={() => store.restoreRecovery()}>Restore</button>
-          <button onClick={() => store.dismissRecovery()}>Discard</button>
+          <button className="primary" onClick={() => store.restoreRecovery()} title="Bring back the song as it was at the last autosave">Restore</button>
+          <button onClick={() => store.dismissRecovery()} title="Throw the autosaved copy away and start fresh">Discard</button>
         </div>
       )}
       <ConfirmDialog state={state} store={store} />
       {state.info && (
         <div className="banner info">
           <span>{state.info}</span>
-          <button onClick={() => store.clearInfo()}>OK</button>
+          <button onClick={() => store.clearInfo()} title="Close this message">OK</button>
         </div>
       )}
       {state.busy && <div className="banner info" data-testid="busy"><span>{state.busy}</span></div>}
       {state.error && (
         <div className="banner error">
           <span>{state.error}</span>
-          <button onClick={() => store.clearError()}>OK</button>
+          <button onClick={() => store.clearError()} title="Close this message">OK</button>
         </div>
       )}
-      <header className="toolbar">
-        <div className="brand">music<b>Genie</b></div>
-        <div className="group">
-          <div className="menu-wrap">
-            <button onClick={() => setNewMenu(!newMenu)} title="Start a new song">New ▾</button>
-            {newMenu && (
-              <div className="menu left" onMouseLeave={() => setNewMenu(false)}>
-                <button onClick={() => { setNewMenu(false); store.newSong('guitar'); }}>Guitar song (6 strings, tab + notation)</button>
-                <button onClick={() => { setNewMenu(false); store.newSong('bass'); }}>Bass song (4 strings, tab)</button>
-                <button onClick={() => { setNewMenu(false); store.openChart(true); }} data-testid="new-chart">Chord chart… (type chords, the band plays)</button>
-                <button onClick={() => { setNewMenu(false); store.openDescribe(true); }} data-testid="new-describe">Describe a song… (type it in words)</button>
-              </div>
-            )}
-          </div>
-          <button onClick={() => store.openDialog()} title="Open (Ctrl+O): MusicXML, Guitar Pro, MIDI, Rocksmith .psarc / .rs2dlc / .xml, .mgproj">Open…</button>
-          <button onClick={() => store.save()} disabled={!song} title="Save (Ctrl+S)">Save</button>
-          <button onClick={() => store.save(true)} disabled={!song}>Save As…</button>
-          <button onClick={() => void store.savePackage()} disabled={!song} title="One .mgpack file with the project and all its audio (for moving to another PC)">Package…</button>
-          <button onClick={() => store.openExport(true)} disabled={!song} data-testid="export-open" title="Mixdown WAV/MP3, stems, MIDI, MusicXML, Guitar Pro, PDF">⇩ Export…</button>
-        </div>
-        <div className="group">
-          <button onClick={() => store.undo()} disabled={!state.canUndo} title={`Undo ${state.undoLabel ?? ''} (Ctrl+Z)`}>↶ Undo</button>
-          <button onClick={() => store.redo()} disabled={!state.canRedo} title={`Redo ${state.redoLabel ?? ''} (Ctrl+Y)`}>↷ Redo</button>
-        </div>
-        <div className="group transport">
-          <button className="primary play" disabled={!song || !status?.ready} onClick={() => player?.playPause()} title="Play / pause (Space)">
-            {status?.playing ? '❚❚ Pause' : '▶ Play'}
-          </button>
-          <button disabled={!song || !status?.ready} onClick={() => player?.stop()}>■ Stop</button>
-          <label className={`toggle ${p.loop ? 'on' : ''}`} title="Loop the selected bars (drag over the score to select)">
-            <input type="checkbox" checked={p.loop} onChange={(e) => store.setPractice({ loop: e.target.checked })} /> Loop
-          </label>
-          {status?.range && (
-            <button className="chip" onClick={() => player?.clearRange()} title="Clear selection">
-              bars {status.range.startBar + 1}–{status.range.endBar + 1} ✕
-            </button>
-          )}
-          <label className={`toggle ${p.metronome ? 'on' : ''}`}>
-            <input type="checkbox" checked={p.metronome} onChange={(e) => store.setPractice({ metronome: e.target.checked })} /> Metronome
-          </label>
-          <label className={`toggle ${p.countIn ? 'on' : ''}`}>
-            <input type="checkbox" checked={p.countIn} onChange={(e) => store.setPractice({ countIn: e.target.checked })} /> Count-in
-          </label>
-        </div>
-        <div className="group">
-          <label className="speed" title="Practice speed (does not change the song)">
-            Speed
-            <input type="range" min={25} max={150} step={5} value={p.speed}
-              onChange={(e) => store.setPractice({ speed: Number(e.target.value) })} />
-            <span className="val">{p.speed}%</span>
-          </label>
-        </div>
-        <div className="group">
-          <span className="lbl">Transpose song</span>
-          <button disabled={!song} onClick={() => store.transpose(-1)}>−</button>
-          <span className="val" data-testid="transpose-total">{state.transposeTotal > 0 ? '+' : ''}{state.transposeTotal}</span>
-          <button disabled={!song} onClick={() => store.transpose(1)}>+</button>
-        </div>
-        <div className="group">
-          <button className={state.editMode ? 'chip' : ''} disabled={!song} data-testid="edit-toggle"
-            title="Edit notes: click a beat, type frets (tab) or A-G (notation)" onClick={() => store.setEditMode(!state.editMode)}>✎ Edit</button>
-          <div className="menu-wrap">
-            <button disabled={!song} onClick={() => setSongMenu(!songMenu)} title="Key, time signature and tempo changes; chord chart">Song ▾</button>
-            {songMenu && song && (
-              <div className="menu left" onMouseLeave={() => setSongMenu(false)}>
-                <button onClick={() => { setSongMenu(false); store.openChanges(state.cursor?.bar ?? status?.range?.startBar ?? status?.currentBar ?? 0); }} data-testid="open-changes">Key, time & tempo changes…</button>
-                {song.chart && <button onClick={() => { setSongMenu(false); store.openChart(true, true); }}>Edit chord chart…</button>}
-              </div>
-            )}
-          </div>
-          <button className={state.dock ? 'chip' : ''} disabled={!song} data-testid="compose-toggle" title="Piano roll, drum grid, chord explorer, progressions, MIDI keyboard"
-            onClick={() => store.openDock(state.dock ? null : 'roll')}>🎹 Compose</button>
-          <button className={state.dock === 'mixer' ? 'chip' : ''} disabled={!song} data-testid="mixer-toggle" title="Mixer: faders, meters, effects, sends, master"
-            onClick={() => store.openDock(state.dock === 'mixer' ? null : 'mixer')}>🎚 Mixer</button>
-          <button className={state.dock === 'rec' ? 'chip' : ''} data-testid="rec-toggle" title="Recording to tabs: beats, stems, audio to notes, drums, review, Song to Rocksmith, sheet music from PDF"
-            onClick={() => store.openDock(state.dock === 'rec' ? null : 'rec')}>🎧 Recording</button>
-          {song && <KbdPianoToggle state={state} store={store} />}
-          <button disabled={!song} data-testid="rs-open" title="Export guitar/bass parts as a Rocksmith 2014 song" onClick={() => store.openRsExport(true)}>⇪ Rocksmith…</button>
-        </div>
-        <div className="group right">
-          <button className={showBand ? 'chip' : ''} disabled={!song} onClick={() => setShowBand(!showBand)} title="Chords, sections and the virtual band">🎸 Band</button>
-          <SettingsMenu state={state} store={store} soundFont={status?.soundFont ?? DEFAULT_SOUNDFONT} />
-        </div>
-      </header>
-      <JobBar />
-      <EditBar state={state} store={store} player={player} />
+      {!full && (
+        <header className="topbar">
+          <div className="brand" title="musicGenie: open or write music, give it instruments and a band, hear it">music<b>Genie</b></div>
+          <MenuBar state={state} store={store} player={player} status={status} />
+          <WorkspaceTabs state={state} store={store} />
+          <WorkspaceTools state={state} store={store} status={status} />
+          <span className="spacer" />
+          <HelpButton topic="workspaces" label="layout" />
+        </header>
+      )}
+      <PlayBar state={state} store={store} player={player} status={status} />
+      {!full && <JobBar />}
+      {!full && <EditBar state={state} store={store} player={player} />}
       <TuningDialog state={state} store={store} />
       <RocksmithDialog state={state} store={store} player={player} />
       <ChartDialog state={state} store={store} />
@@ -249,39 +226,62 @@ export function App({ store, onPlayer, midi }: { store: Store; onPlayer: (p: Sco
       <ChangesDialog state={state} store={store} />
       <ExportDialog state={state} store={store} player={player} />
       <div className="main">
-        <aside className="tracks">
-          <div className="tracks-head">
-            <div className="title" title={song?.title}>{song ? song.title : 'No song open'}</div>
-            {song && <div className="sub">{song.bars.length} bars · {song.tracks.length} tracks · {song.tempos[0]?.bpm} bpm{state.dirty ? ' · unsaved' : ''}</div>}
-          </div>
-          {song?.tracks.map((t, i) => <TrackRow key={t.id} track={t} store={store} index={i} selected={!!state.dock && i === state.selTrack} />)}
-          {song && <BackingRow song={song} store={store} />}
-          {!song && (
-            <div className="empty">
-              Open a MusicXML, Guitar Pro (3-7), MIDI, Rocksmith (.psarc) or .mgproj file, or start a new guitar or bass song.
-              <button className="primary" onClick={() => store.openDialog()}>Open a file…</button>
-            </div>
-          )}
-        </aside>
+        {!full && !showHome && (L.leftOpen ? (
+          <>
+            <aside className="tracks" style={{ width: L.leftW }} data-testid="tracks-panel">
+              <div className="tracks-head">
+                <div className="panel-title">
+                  <span className="title" title={song?.title}>{song ? song.title : 'No song open'}</span>
+                  <HelpButton topic="tracks" label="tracks panel" />
+                  <button className="fold" onClick={() => store.setLayout({ leftOpen: false })} title="Fold the tracks panel away to give the music more room" data-testid="left-fold">«</button>
+                </div>
+                {song && <div className="sub">{song.bars.length} bars · {song.tracks.length} tracks · {song.tempos[0]?.bpm} bpm{state.dirty ? ' · unsaved' : ''}</div>}
+              </div>
+              {song?.tracks.map((t, i) => <TrackRow key={t.id} track={t} store={store} index={i} selected={!!state.dock && i === state.selTrack} />)}
+              {song && <BackingRow song={song} store={store} />}
+              {!song && <div className="empty">Open or start a song from the Home screen: its instruments are listed here.</div>}
+            </aside>
+            <Splitter dir="col" title="Drag to make the tracks panel wider or narrower" testId="left-splitter"
+              onDrag={(d, s) => { if (s) startW.current = L.leftW; else store.setLayout({ leftW: Math.max(170, Math.min(520, startW.current + d)) }); }} />
+          </>
+        ) : (
+          <button className="rail" onClick={() => store.setLayout({ leftOpen: true })} title="Show the tracks panel (instruments)" data-testid="left-rail"><span>» Tracks</span></button>
+        ))}
         <div className="center">
           <ReviewView state={state} store={store} player={player} status={status} />
-          <section className="score" ref={scrollRef}>
+          <section className={`score ${L.view === 'page' ? 'paper' : ''}`} ref={scrollRef} data-testid="score">
             <div ref={hostRef} className="at-host" />
             <CursorOverlay state={state} player={player} status={status} />
             <ChordPickerPopover state={state} store={store} />
           </section>
+          {showHome && !full && <Home state={state} store={store} />}
           <Dock state={state} store={store} status={status} midi={midi} />
         </div>
-        {showBand && song && <BandPanel state={state} store={store} status={status} />}
+        {!full && song && state.workspace === 'arrange' && !state.home && (L.rightOpen ? (
+          <>
+            <Splitter dir="col" title="Drag to make the band panel wider or narrower" testId="right-splitter"
+              onDrag={(d, s) => { if (s) startW.current = L.rightW; else store.setLayout({ rightW: Math.max(240, Math.min(560, startW.current - d)) }); }} />
+            <div className="side-right" style={{ width: L.rightW }}>
+              <button className="fold right" onClick={() => store.setLayout({ rightOpen: false })} title="Fold the band panel away to give the music more room" data-testid="right-fold">»</button>
+              <BandPanel state={state} store={store} status={status} />
+            </div>
+          </>
+        ) : (
+          <button className="rail right" onClick={() => store.setLayout({ rightOpen: true })} data-testid="right-rail"
+            title="Show the band panel: chords, sections, and a virtual band that plays along (Generate)"><span>🎸 Band «</span></button>
+        ))}
       </div>
-      <footer className="status">
-        <span>{status?.ready ? 'Player ready' : song ? 'Loading sounds…' : ''}</span>
-        {status && song && <span data-testid="bar-indicator">Bar {status.currentBar + 1} / {song.bars.length}</span>}
-        {state.lastAutosave && <span>Autosaved {new Date(state.lastAutosave).toLocaleTimeString()}</span>}
-        {status && <span data-testid="soundfont">Sound: {status.soundFont}</span>}
-        {!!status?.swing && <span>Swing {Math.round(status.swing * 100)}%</span>}
-        {window.mg.flags.mute && <span className="muted">MUTED (--mute)</span>}
-      </footer>
+      {!full && (
+        <footer className="status">
+          <span>{status?.ready ? 'Player ready' : song ? 'Loading sounds…' : ''}</span>
+          {state.lastAutosave && <span>Autosaved {new Date(state.lastAutosave).toLocaleTimeString()}</span>}
+          {status && <span data-testid="soundfont" title="The sound set (SoundFont) the instruments play with">Sound: {status.soundFont}</span>}
+          {!!status?.swing && <span>Swing {Math.round(status.swing * 100)}%</span>}
+          {window.mg.flags.mute && <span className="muted">MUTED (--mute)</span>}
+        </footer>
+      )}
+      <HelpDialog />
+      <TourOverlay state={state} store={store} />
     </div>
   );
 }
@@ -293,18 +293,18 @@ function TrackRow({ track: t, store, index, selected }: { track: Track; store: S
       <div className={`track ${selected ? 'selected' : ''}`} data-track={t.id} onMouseDown={() => store.setSelTrack(index)}>
         <div className="row1">
           <span className="name" title={t.name}>🎙 {t.name}</span>
-          <span className="tag" title="Audio track (clips in the 🎙 Audio tab)">audio · {t.audio.clips.length}</span>
-          <button className={`ms ${t.mixer.mute ? 'on mute' : ''}`} title="Mute" onClick={() => store.setMixer(t.id, { mute: !t.mixer.mute })}>M</button>
-          <button className={`ms ${t.mixer.solo ? 'on solo' : ''}`} title="Solo" onClick={() => store.setMixer(t.id, { solo: !t.mixer.solo })}>S</button>
+          <span className="tag" title="Audio track: real recorded sound (its clips are in Mix > Audio tracks)">audio · {t.audio.clips.length}</span>
+          <button className={`ms ${t.mixer.mute ? 'on mute' : ''}`} title="Mute (M): silence this track, e.g. to play that part yourself" onClick={() => store.setMixer(t.id, { mute: !t.mixer.mute })}>M</button>
+          <button className={`ms ${t.mixer.solo ? 'on solo' : ''}`} title="Solo (S): hear only this track (and other soloed ones), e.g. to learn its part" onClick={() => store.setMixer(t.id, { solo: !t.mixer.solo })}>S</button>
         </div>
         <div className="row3">
-          <label title="Volume">Vol
+          <label title="Volume of this track: lower it if it drowns the others">Vol
             <input type="range" min={0} max={1} step={0.01} value={t.mixer.volume} onChange={(e) => store.setMixer(t.id, { volume: Number(e.target.value) })} />
           </label>
-          <label title="Pan">Pan
+          <label title="Pan: place this track more to the left or right speaker">Pan
             <input type="range" min={-1} max={1} step={0.05} value={t.mixer.pan} onChange={(e) => store.setMixer(t.id, { pan: Number(e.target.value) })} />
           </label>
-          <button onClick={() => store.openDock('audio')} title="Clips, import, recording">Clips…</button>
+          <button onClick={() => store.openDock('audio')} title="Open Mix > Audio tracks to move, trim, fade or record this track's audio">Clips…</button>
         </div>
       </div>
     );
@@ -312,7 +312,7 @@ function TrackRow({ track: t, store, index, selected }: { track: Track; store: S
   return (
     <div className={`track ${t.display.visible ? '' : 'hidden'} ${selected ? 'selected' : ''}`} data-track={t.id} onMouseDown={() => store.setSelTrack(index)}>
       <div className="row1">
-        <input type="checkbox" checked={t.display.visible} title="Show this track"
+        <input type="checkbox" checked={t.display.visible} title="Show this track in the score (it still plays when hidden)"
           onChange={(e) => store.setDisplay(t.id, { visible: e.target.checked })} />
         <span className="name" title={t.name}>{t.name}</span>
         {t.generated && (
@@ -321,46 +321,47 @@ function TrackRow({ track: t, store, index, selected }: { track: Track; store: S
             {hashOf(t.staves) !== t.generated.contentHash ? 'edited' : STYLES[t.generated.style].name.split(' ')[0]}
           </span>
         )}
-        {t.derived && <span className="tag" title="Made by Split into band parts">{t.derived.part}</span>}
-        <button className={`ms ${t.mixer.mute ? 'on mute' : ''}`} title="Mute" onClick={() => store.setMixer(t.id, { mute: !t.mixer.mute })}>M</button>
-        <button className={`ms ${t.mixer.solo ? 'on solo' : ''}`} title="Solo" onClick={() => store.setMixer(t.id, { solo: !t.mixer.solo })}>S</button>
+        {t.derived && <span className="tag" title="Made by “Split into melody / bass / harmony”">{t.derived.part}</span>}
+        <button className={`ms ${t.mixer.mute ? 'on mute' : ''}`} title="Mute (M): silence this track, e.g. to play that part yourself" onClick={() => store.setMixer(t.id, { mute: !t.mixer.mute })}>M</button>
+        <button className={`ms ${t.mixer.solo ? 'on solo' : ''}`} title="Solo (S): hear only this track (and other soloed ones), e.g. to learn its part" onClick={() => store.setMixer(t.id, { solo: !t.mixer.solo })}>S</button>
       </div>
       <div className="row2">
-        <select value={t.instrument.id} onChange={(e) => store.setInstrument(t.id, e.target.value)} title="Instrument">
+        <select value={t.instrument.id} onChange={(e) => store.setInstrument(t.id, e.target.value)} data-tour={index === 0 ? 'instrument' : undefined}
+          title="Instrument: which instrument plays this part. Change it to hear the same notes on another instrument.">
           {INSTRUMENT_GROUPS.map((g) => (
             <optgroup key={g} label={g}>
               {INSTRUMENTS.filter((i) => i.group === g).map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
             </optgroup>
           ))}
         </select>
-        <select value={t.display.mode} disabled={!fretted} title="Show as"
+        <select value={t.display.mode} disabled={!fretted} title="Show this guitar/bass part as sheet music, as tab (string + fret numbers), or both"
           onChange={(e) => store.setDisplay(t.id, { mode: e.target.value as DisplayMode })}>
-          <option value="notation">Notation</option>
+          <option value="notation">Sheet music</option>
           <option value="tab">Tab</option>
-          <option value="both">Both</option>
+          <option value="both">Sheet music + tab</option>
         </select>
       </div>
       <TuningControls track={t} store={store} />
       <div className="row3">
-        <label title="Volume">Vol
+        <label title="Volume of this track: lower it if it drowns the others">Vol
           <input type="range" min={0} max={1} step={0.01} value={t.mixer.volume}
             onChange={(e) => store.setMixer(t.id, { volume: Number(e.target.value) })} />
         </label>
-        <label title="Pan">Pan
+        <label title="Pan: place this track more to the left or right speaker">Pan
           <input type="range" min={-1} max={1} step={0.1} value={t.mixer.pan}
             onChange={(e) => store.setMixer(t.id, { pan: Number(e.target.value) })} />
         </label>
       </div>
       <div className="row3">
         {!t.instrument.percussion && !t.generated && (
-          <button className="split" title="Split into band parts: melody, harmony, bass (this track is kept, muted)"
-            onClick={() => store.splitTrack(t.id)}>Split</button>
+          <button className="split" title="Split into band parts: melody, harmony and bass tracks, e.g. to turn a piano piece into a band arrangement (this track is kept, muted)"
+            onClick={() => store.splitTrack(t.id)}>Split into melody / bass / harmony</button>
         )}
         <HarmonyMenu track={t} store={store} />
         {!t.instrument.percussion && (
-          <span className="tr" title="Transpose this track"><span className="lbl">Transpose </span>
-            <button onClick={() => store.transpose(-1, t.id)}>−</button>
-            <button onClick={() => store.transpose(1, t.id)}>+</button>
+          <span className="tr" title="Transpose: move only this track's notes up or down by half steps"><span className="lbl">Transpose </span>
+            <button onClick={() => store.transpose(-1, t.id)} title="Move this track down a half step (semitone)">−</button>
+            <button onClick={() => store.transpose(1, t.id)} title="Move this track up a half step (semitone)">+</button>
           </span>
         )}
       </div>

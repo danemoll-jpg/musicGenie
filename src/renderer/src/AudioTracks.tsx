@@ -10,6 +10,7 @@ import { recorder, type RecorderState } from './audio/recorder';
 import type { AudioTracks } from './audioTracksCtl';
 import type { PlayerStatus } from './player';
 import type { AppState, Store } from './store';
+import { HelpButton, MoreOptions } from './HelpUi';
 
 const BAR_PX = 90;
 const ROW_H = 56;
@@ -89,8 +90,8 @@ function ClipRow({ song, trackId, clips, store, sel, setSel }: { song: Song; tra
 }
 
 function ClipInspector({ song, trackId, clip, store, playMs }: { song: Song; trackId: string; clip: AudioClip; store: Store; playMs: number }) {
-  const num = (label: string, key: 'fadeInMs' | 'fadeOutMs' | 'gainDb', min: number, max: number, step: number) => (
-    <label>{label}
+  const num = (label: string, key: 'fadeInMs' | 'fadeOutMs' | 'gainDb', min: number, max: number, step: number, title: string) => (
+    <label title={title}>{label}
       <input type="number" min={min} max={max} step={step} value={Math.round(clip[key] * 10) / 10} style={{ width: 70 }}
         onChange={(e) => store.edit((s) => updateClip(s, trackId, clip.id, { [key]: Math.max(min, Math.min(max, Number(e.target.value))) }), 'Clip ' + label.toLowerCase(), 'clip-' + key + clip.id)}
         data-testid={'clip-' + key} />
@@ -100,11 +101,11 @@ function ClipInspector({ song, trackId, clip, store, playMs }: { song: Song; tra
     <div className="rec-row" data-testid="clip-inspector">
       <b>{clip.name}</b>
       <span className="hint">bar {clip.bar + 1}, {(clip.lengthMs / 1000).toFixed(2)} s</span>
-      {num('Fade in (ms)', 'fadeInMs', 0, clip.lengthMs, 10)}
-      {num('Fade out (ms)', 'fadeOutMs', 0, clip.lengthMs, 10)}
-      {num('Gain (dB)', 'gainDb', -48, 24, 0.5)}
-      <button onClick={() => store.edit((s) => splitClipAtMs(s, trackId, clip.id, playMs), 'Split clip')} title="Split at the playhead">Split at playhead</button>
-      <button onClick={() => store.edit((s) => removeClip(s, trackId, clip.id), 'Delete clip')}>Delete</button>
+      {num('Fade in (ms)', 'fadeInMs', 0, clip.lengthMs, 10, 'Fade in: the clip starts silent and gets louder over this many milliseconds, to avoid a sudden start or click')}
+      {num('Fade out (ms)', 'fadeOutMs', 0, clip.lengthMs, 10, 'Fade out: the clip gets quieter over this many milliseconds at its end, for a smooth finish')}
+      {num('Volume (dB)', 'gainDb', -48, 24, 0.5, 'Clip volume (gain) in dB: make just this clip louder (+) or quieter (-) when it is too loud or too soft')}
+      <button onClick={() => store.edit((s) => splitClipAtMs(s, trackId, clip.id, playMs), 'Split clip')} title="Cut the clip in two where the play position is, e.g. to move or delete one part">Split at playhead</button>
+      <button onClick={() => store.edit((s) => removeClip(s, trackId, clip.id), 'Delete clip')} title="Delete this clip from the track (Undo brings it back; the audio file stays on disk)">Delete</button>
       <span className="hint">{song.title}</span>
     </div>
   );
@@ -133,10 +134,11 @@ export function AudioPanel({ state, store, status }: { state: AppState; store: S
   return (
     <div className="audio-panel" data-testid="audio-panel">
       <div className="rec-row">
-        <button onClick={() => ctl?.addTrack()} data-testid="add-audio-track">+ Audio track</button>
-        <button onClick={() => void ctl?.importFile(null, armedId, curBar)} title="WAV, MP3, OGG or FLAC, placed at the current bar">Import audio…</button>
+        <HelpButton topic="audio-tracks" label="panel" />
+        <button onClick={() => ctl?.addTrack()} data-testid="add-audio-track" title="Add a track for real sound (a recording or an audio file) next to the written parts, e.g. your own voice or guitar">+ Audio track</button>
+        <button onClick={() => void ctl?.importFile(null, armedId, curBar)} title="Put an audio file (WAV, MP3, OGG or FLAC) on the audio track at the current bar, e.g. a drum loop or a recorded part">Import audio…</button>
         <span className="lbl" style={{ marginLeft: 10 }}>Input</span>
-        <select value={rec.deviceId ?? ''} onChange={(e) => {
+        <select title="Which microphone or audio interface to record from (none = recording off)" value={rec.deviceId ?? ''} onChange={(e) => {
           const id = e.target.value;
           if (id === '') recorder.close();
           else void recorder.openDevice(id === 'default' ? null : id).then(() => window.mg.settingsSet({ audioInput: id }));
@@ -146,31 +148,33 @@ export function AudioPanel({ state, store, status }: { state: AppState; store: S
           <option value="default">System default</option>
           {rec.devices.filter((d) => d.id !== 'default').map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
-        <button onClick={() => void recorder.refreshDevices()} title="Look for inputs again">↻</button>
-        <span className="in-meter" title="Input level"><div style={{ width: Math.min(100, rec.level * 100) + '%', background: rec.level > 0.98 ? '#e03131' : undefined }} /></span>
-        <label className={`toggle ${rec.monitor ? 'on' : ''}`} title="Hear the input through the armed track (off by default)">
-          <input type="checkbox" checked={rec.monitor} onChange={(e) => recorder.setMonitor(e.target.checked, armedId)} /> Monitor
+        <button onClick={() => void recorder.refreshDevices()} title="Look for microphones and interfaces again, e.g. after plugging one in">↻</button>
+        <span className="in-meter" title="Input level: how loud the microphone/input is; red = too loud, turn the input down"><div style={{ width: Math.min(100, rec.level * 100) + '%', background: rec.level > 0.98 ? '#e03131' : undefined }} /></span>
+        <label className={`toggle ${rec.monitor ? 'on' : ''}`} title="Hear yourself: play the input through the track's speakers while recording (monitor; off by default, use headphones)">
+          <input type="checkbox" checked={rec.monitor} onChange={(e) => recorder.setMonitor(e.target.checked, armedId)} /> Hear input
         </label>
-        <label className={`toggle ${countIn ? 'on' : ''}`}><input type="checkbox" checked={countIn} onChange={(e) => setCountIn(e.target.checked)} /> Count-in</label>
-        <label className={`toggle ${metro ? 'on' : ''}`}><input type="checkbox" checked={metro} onChange={(e) => setMetro(e.target.checked)} /> Metronome</label>
-        <label title="Round-trip latency of the interface; recordings are moved earlier by this much">Latency
-          <input type="number" min={0} max={1000} step={0.5} value={rec.latencyMs} style={{ width: 64 }}
-            onChange={(e) => { recorder.setLatency(Number(e.target.value)); void window.mg.settingsSet({ latencyMs: Number(e.target.value) }); }} data-testid="latency" /> ms
-        </label>
-        <button disabled={!rec.open || !!busy} title="Connect the interface output to its input with a cable, then press this"
-          onClick={async () => {
-            setBusy('Measuring…');
-            try {
-              const ms = await recorder.measureLatency();
-              if (ms === null) store.showError('No click came back: connect the output to the input with a cable (and turn the volume up).');
-              else void window.mg.settingsSet({ latencyMs: ms });
-            } finally { setBusy(null); }
-          }}>Test latency</button>
+        <label className={`toggle ${countIn ? 'on' : ''}`} title="Count-in: one bar of clicks before recording starts, so you can come in on time"><input type="checkbox" checked={countIn} onChange={(e) => setCountIn(e.target.checked)} /> Count-in (clicks before playing)</label>
+        <label className={`toggle ${metro ? 'on' : ''}`} title="Metronome: a click on every beat while you record, to keep in time"><input type="checkbox" checked={metro} onChange={(e) => setMetro(e.target.checked)} /> Metronome</label>
+        <MoreOptions title="Timing correction for your audio interface; only needed if recordings come out late">
+          <label title="Delay correction (round-trip latency): recordings are moved earlier by this many milliseconds; fix it here if recordings sound late">Delay correction
+            <input type="number" min={0} max={1000} step={0.5} value={rec.latencyMs} style={{ width: 64 }}
+              onChange={(e) => { recorder.setLatency(Number(e.target.value)); void window.mg.settingsSet({ latencyMs: Number(e.target.value) }); }} data-testid="latency" /> ms
+          </label>
+          <button disabled={!rec.open || !!busy} title="Measure the delay correction: connect the interface's output to its input with a cable, then press this"
+            onClick={async () => {
+              setBusy('Measuring…');
+              try {
+                const ms = await recorder.measureLatency();
+                if (ms === null) store.showError('No click came back: connect the output to the input with a cable (and turn the volume up).');
+                else void window.mg.settingsSet({ latencyMs: ms });
+              } finally { setBusy(null); }
+            }}>Measure it</button>
+        </MoreOptions>
         {!ctl?.recording ? (
-          <button className="primary" disabled={!rec.open || !!busy} data-testid="audio-record"
+          <button className="primary" disabled={!rec.open || !!busy} data-testid="audio-record" title="Record from the input onto the audio track, starting at the current bar (pick an Input first)"
             onClick={() => void ctl?.startRecording({ trackId: armedId, startBar: curBar, countIn, metronome: metro }).then(() => setBusy('Recording…')).catch((e) => store.showError((e as Error).message))}>● Record</button>
         ) : (
-          <button className="primary" data-testid="audio-stop" onClick={() => void ctl.stopRecording().finally(() => setBusy(null))}>■ Stop</button>
+          <button className="primary" data-testid="audio-stop" title="Stop recording and keep what was recorded as a clip" onClick={() => void ctl.stopRecording().finally(() => setBusy(null))}>■ Stop</button>
         )}
         {busy && <span className={ctl?.recording ? 'recording' : 'hint'}>{busy}</span>}
         {rec.error && <span className="hint" style={{ color: '#c92a2a' }}>{rec.error}</span>}

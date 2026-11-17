@@ -1,4 +1,5 @@
 // window.mgTest: driven by tests/e2e (only installed with --hidden).
+import { flushSync } from 'react-dom';
 import {
   countNoteOnsets, serializeProject, staffNotes, tempoChanges, songLengthMs, tempoPoints, tickAtMs, trackEvents, type BandRole, type BandSettings, type Cursor,
   type RocksmithExport, type StyleId,
@@ -145,7 +146,13 @@ export function installTestApi(
     setPlayer: (role: BandRole, patch: Parameters<Store['setPlayer']>[1]) => store.setPlayer(role, patch),
     /** Press the panel's Generate button (the real UI path). */
     clickGenerate() {
-      (document.querySelector('[data-testid="generate"]') as HTMLButtonElement).click();
+      // Round 8: the band panel lives in Arrange and starts folded; unfold it for the click, then put things back.
+      const btn = () => document.querySelector('[data-testid="generate"]') as HTMLButtonElement | null;
+      if (btn()) return btn()!.click();
+      const { workspace, dock, layout } = store.state;
+      flushSync(() => { store.setWorkspace('arrange'); store.setLayout({ rightOpen: true }); });
+      btn()!.click();
+      flushSync(() => { if (workspace !== 'arrange') { if (dock) store.openDock(dock); else store.setWorkspace(workspace); } store.setLayout({ rightOpen: layout.rightOpen }); });
     },
     tryAnother: () => store.tryAnother(),
     regenerate: (target: { sectionStartBar?: number; role?: BandRole }) => store.regenerate(target),
